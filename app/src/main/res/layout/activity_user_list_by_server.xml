@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121228"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="#1E1E38"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp">
+
+        <TextView
+            android:id="@+id/btnBack"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="#3d3d5c"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="→"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtHeaderTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/server_users"
+            android:textColor="#FFD700"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/inputSearch"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_margin="16dp"
+        android:background="#1E1E38"
+        android:hint="@string/search_user_hint"
+        android:paddingHorizontal="16dp"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#888888"
+        android:textSize="14sp" />
+
+    <!-- Status Filter Buttons Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:layout_marginBottom="12dp">
+
+        <TextView android:id="@+id/btnFilterAll" android:layout_width="0dp" android:layout_height="38dp" android:layout_marginEnd="4dp" android:layout_weight="1" android:background="#FFD700" android:gravity="center" android:text="@string/all" android:textColor="#000000" android:textSize="12sp" android:textStyle="bold" />
+        <TextView android:id="@+id/btnFilterActive" android:layout_width="0dp" android:layout_height="38dp" android:layout_marginHorizontal="2dp" android:layout_weight="1" android:background="#3d3d5c" android:gravity="center" android:text="Active" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+        <TextView android:id="@+id/btnFilterInactive" android:layout_width="0dp" android:layout_height="38dp" android:layout_marginHorizontal="2dp" android:layout_weight="1" android:background="#3d3d5c" android:gravity="center" android:text="Inactive" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+        <TextView android:id="@+id/btnFilterExpired" android:layout_width="0dp" android:layout_height="38dp" android:layout_marginStart="4dp" android:layout_weight="1" android:background="#3d3d5c" android:gravity="center" android:text="Expired" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:layout_marginTop="30dp"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="24dp" />
+</LinearLayout>

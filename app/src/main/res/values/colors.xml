@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VIP Royal Deep Blue gradient palette -->
+    <color name="vip_royal_blue_start">#0B1740</color>
+    <color name="vip_royal_blue_center">#101E55</color>
+    <color name="vip_midnight_blue">#070C26</color>
+    <color name="vip_deep_navy">#050A1A</color>
+
+    <!-- Panels -->
+    <color name="vip_panel">#131B43</color>
+    <color name="vip_panel_dark">#0E1638</color>
+    <color name="vip_panel_light">#1A2456</color>
+
+    <!-- Neon accents -->
+    <color name="vip_icy_blue">#7FE6FF</color>
+    <color name="vip_neon_blue">#3DD8FF</color>
+    <color name="vip_neon_green">#39FF8B</color>
+    <color name="vip_neon_pink">#FF61D2</color>
+    <color name="vip_neon_purple">#A06BFF</color>
+    <color name="vip_neon_amber">#FFB347</color>
+
+    <!-- Gold -->
+    <color name="vip_gold">#FFD700</color>
+    <color name="vip_gold_deep">#D4A017</color>
+    <color name="vip_gold_light">#FFE680</color>
+
+    <!-- Text -->
+    <color name="vip_text_primary">#F2F4FF</color>
+    <color name="vip_text_secondary">#B8C0E0</color>
+    <color name="vip_text_muted">#7A82A8</color>
+    <color name="vip_text_on_gold">#0A0F2C</color>
+
+    <!-- Status -->
+    <color name="vip_success">#39FF8B</color>
+    <color name="vip_warning">#FFB347</color>
+    <color name="vip_error">#FF5577</color>
+    <color name="vip_info">#3DD8FF</color>
+
+    <!-- Legacy aliases (kept for backward compatibility) -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="bg_dark">#070C26</color>
+    <color name="panel_bg">#131B43</color>
+    <color name="gold">#FFD700</color>
+    <color name="accent_cyan">#3DD8FF</color>
+</resources>

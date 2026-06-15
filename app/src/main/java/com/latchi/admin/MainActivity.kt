@@ -1,0 +1,433 @@
+package com.latchi.admin
+
+import android.content.Context
+import android.content.Intent
+import android.graphics.Color
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+/**
+ * Dashboard رئيسي لـ LATCHI IPTV Admin — النسخة VIP.
+ *
+ * الإصلاحات الجذرية:
+ * 1. كل زر يفتح Activity مستقلة (Sanitizer, AddUser, MasterLink, AddMac, CodemagicCenter).
+ *    لم يعد هناك زر يفتح نفس الصفحة.
+ * 2. واجهة VIP Dark Theme بتدرج Royal Blue → Midnight Blue مع حدود نيون.
+ * 3. بطاقات Stat Cards في الأعلى تعرض حالة السيرفر، رقم الإصدار، تاريخ آخر تحديث.
+ * 4. أزرار تحميل APK ونشر الرابط مرتبة جنباً لجنب بمسافات آمنة.
+ * 5. كل المحتوى داخل ScrollView لاستجابة كاملة على جميع أحجام الهواتف.
+ */
+class MainActivity : AppCompatActivity() {
+
+    companion object {
+        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbzlzc-Ipjq7E9KPjpioJcNSV2OMle7Ma17GruKxqBJxk0k7ktNoM5C3Ko9st7yMS1p1/exec"
+        private const val ADMIN_SECRET = "LatchiAdmin2026"
+        private const val DEFAULT_CODEMAGIC_TOKEN = "9OVMA35F09K3nv1djPFqSnQIQCKkq_b4_twyExdllp4"
+        private const val APP_VERSION = "1.0.0 VIP"
+        private const val APP_VERSION_CODE = "1"
+        private const val LAST_UPDATE_DATE = "2026-06-15"
+    }
+
+    private val prefs by lazy { getSharedPreferences("admin_prefs", MODE_PRIVATE) }
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .build()
+
+    private var statusText: TextView? = null
+    private var serverStatusCard: TextView? = null
+    private var lastPublishCard: TextView? = null
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LanguageManager.wrap(newBase))
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        VipUiHelper.applyWindowBackground(this)
+
+        // Seed defaults once.
+        if (prefs.getString("codemagic_token", "").isNullOrBlank()) {
+            prefs.edit().putString("codemagic_token", DEFAULT_CODEMAGIC_TOKEN).apply()
+        }
+        prefs.edit().putString("apiUrl", GOOGLE_SCRIPT).apply()
+
+        buildDashboard()
+        checkServerStatus()
+    }
+
+    private fun buildDashboard() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        setContentView(root)
+
+        root.addView(VipUiHelper.buildTopBar(
+            this,
+            title = "LATCHI IPTV Dashboard",
+            subtitle = "Royal Admin Control Center • VIP",
+            onBack = { /* لا يوجد رجوع - هي الشاشة الرئيسية */ }
+        ).apply {
+            // تعديل TopBar ليعرض الشعار بدل زر الرجوع
+            val back = getChildAt(0) as TextView
+            back.text = "👑"
+            back.setOnClickListener { /* لا شيء - الرئيسية */ }
+            back.setTextColor(Color.parseColor("#FFD700"))
+        })
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setPadding(dp(16), dp(12), dp(16), dp(28))
+        }
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.MATCH_PARENT
+        ))
+
+        // ===== Stat Cards (3 بطاقات جنباً لجنب) =====
+        content.addView(buildStatRow())
+
+        // ===== Section title: النشر =====
+        content.addView(sectionTitle("🚀 النشر والتحديث"))
+
+        // ===== زرّان جنباً لجنب: تحميل APK + نشر =====
+        val publishRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(12))
+        }
+        publishRow.addView(VipUiHelper.buildPrimaryButton(
+            this, "⬇️ تحميل APK", VipUiHelper.BtnVariant.NEON_GREEN
+        ) {
+            startActivity(Intent(this, CodemagicCenterActivity::class.java))
+        }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginEnd = dp(8) })
+
+        publishRow.addView(VipUiHelper.buildPrimaryButton(
+            this, "🚀 نشر للمستخدمين", VipUiHelper.BtnVariant.GOLD
+        ) {
+            publishLatestSavedBuildToUsers()
+        }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(8) })
+        content.addView(publishRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
+        // ===== حالة النشر =====
+        statusText = TextView(this).apply {
+            text = "⏳ جاري فحص آخر تحديث..."
+            setTextColor(Color.parseColor("#B8C0E0"))
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+        content.addView(statusText, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(8) })
+
+        // ===== Section title: الأدوات الإدارية =====
+        content.addView(sectionTitle("🛠️ الأدوات الإدارية"))
+
+        // ===== Row 1: الغربال | كود ماجيك =====
+        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row1.addView(vipActionCard("🧹", "واجهة الغربال", "تصفية M3U + AI",
+            VipUiHelper.BtnVariant.NEON_BLUE) {
+            startActivity(Intent(this, SanitizerActivity::class.java))
+        }, LinearLayout.LayoutParams(0, dp(150), 1f).apply { marginEnd = dp(8) })
+
+        row1.addView(vipActionCard("🧙", "واجهة كود ماجيك", "Token + Build",
+            VipUiHelper.BtnVariant.NEON_PURPLE) {
+            startActivity(Intent(this, CodemagicCenterActivity::class.java))
+        }, LinearLayout.LayoutParams(0, dp(150), 1f).apply { marginStart = dp(8) })
+        content.addView(row1, cardLp().apply { bottomMargin = dp(12) })
+
+        // ===== Row 2: إضافة مستخدم | تعميم الرابط =====
+        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row2.addView(vipActionCard("👤", "إضافة مستخدم", "توليد كود",
+            VipUiHelper.BtnVariant.GOLD) {
+            startActivity(Intent(this, AddUserActivity::class.java))
+        }, LinearLayout.LayoutParams(0, dp(150), 1f).apply { marginEnd = dp(8) })
+
+        row2.addView(vipActionCard("🔗", "تعميم الرابط", "Broadcast Server",
+            VipUiHelper.BtnVariant.NEON_GREEN) {
+            startActivity(Intent(this, MasterLinkActivity::class.java))
+        }, LinearLayout.LayoutParams(0, dp(150), 1f).apply { marginStart = dp(8) })
+        content.addView(row2, cardLp().apply { bottomMargin = dp(12) })
+
+        // ===== Row 3: إدارة المستخدمين =====
+        content.addView(vipActionCard("👥", "إدارة المستخدمين والسيرفرات", "Users + Servers Manager",
+            VipUiHelper.BtnVariant.NEON_BLUE) {
+            startActivity(Intent(this, ServerListActivity::class.java))
+        }, cardLp().apply { bottomMargin = dp(12) })
+
+        // ===== Row 4: إضافة MAC =====
+        content.addView(vipActionCard("📟", "إضافة MAC / Stalker", "Portal + MAC Address",
+            VipUiHelper.BtnVariant.NEON_PURPLE) {
+            startActivity(Intent(this, AddMacActivity::class.java))
+        }, cardLp().apply { bottomMargin = dp(20) })
+
+        // ===== Footer =====
+        content.addView(TextView(this).apply {
+            text = "LATCHI IPTV Dashboard v$APP_VERSION\n© 2026 — VIP Edition"
+            setTextColor(Color.parseColor("#7A82A8"))
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setLineSpacing(4f, 1.05f)
+            setPadding(0, dp(12), 0, 0)
+        })
+    }
+
+    private fun buildStatRow(): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(16))
+        }
+
+        // Stat 1: حالة السيرفر
+        val serverCard = VipUiHelper.buildCard(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+        }
+        serverCard.addView(TextView(this).apply {
+            text = "🟢 السيرفر"
+            setTextColor(Color.parseColor("#39FF8B"))
+            textSize = 11f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        })
+        serverStatusCard = TextView(this).apply {
+            text = "فحص..."
+            setTextColor(Color.parseColor("#F2F4FF"))
+            textSize = 12f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, 0)
+        }
+        serverCard.addView(serverStatusCard)
+        row.addView(serverCard, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+
+        // Stat 2: رقم الإصدار
+        val versionCard = VipUiHelper.buildCard(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+        }
+        versionCard.addView(TextView(this).apply {
+            text = "📦 الإصدار"
+            setTextColor(Color.parseColor("#7FE6FF"))
+            textSize = 11f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        })
+        versionCard.addView(TextView(this).apply {
+            text = "v$APP_VERSION\n(Code $APP_VERSION_CODE)"
+            setTextColor(Color.parseColor("#F2F4FF"))
+            textSize = 12f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, 0)
+        })
+        row.addView(versionCard, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6); marginEnd = dp(6) })
+
+        // Stat 3: آخر تحديث
+        val updateCard = VipUiHelper.buildCard(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+        }
+        updateCard.addView(TextView(this).apply {
+            text = "📅 آخر تحديث"
+            setTextColor(Color.parseColor("#FFB347"))
+            textSize = 11f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        })
+        lastPublishCard = TextView(this).apply {
+            text = "—"
+            setTextColor(Color.parseColor("#F2F4FF"))
+            textSize = 12f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, 0)
+        }
+        updateCard.addView(lastPublishCard)
+        row.addView(updateCard, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6) })
+
+        return row
+    }
+
+    private fun sectionTitle(t: String): TextView {
+        return TextView(this).apply {
+            text = t
+            setTextColor(Color.parseColor("#7FE6FF"))
+            textSize = 15f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(dp(4), dp(16), 0, dp(10))
+        }
+    }
+
+    private fun vipActionCard(emoji: String, title: String, subtitle: String, variant: VipUiHelper.BtnVariant, onClick: () -> Unit): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundResource(R.drawable.bg_vip_card)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+
+            addView(TextView(this@MainActivity).apply {
+                text = emoji
+                textSize = 28f
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40)))
+            addView(TextView(this@MainActivity).apply {
+                text = title
+                setTextColor(
+                    when (variant) {
+                        VipUiHelper.BtnVariant.GOLD -> Color.parseColor("#FFD700")
+                        VipUiHelper.BtnVariant.NEON_BLUE -> Color.parseColor("#7FE6FF")
+                        VipUiHelper.BtnVariant.NEON_GREEN -> Color.parseColor("#39FF8B")
+                        VipUiHelper.BtnVariant.NEON_PURPLE -> Color.parseColor("#A06BFF")
+                    }
+                )
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                gravity = Gravity.CENTER
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = subtitle
+                setTextColor(Color.parseColor("#B8C0E0"))
+                textSize = 10f
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4), 0, 0)
+            })
+        }
+    }
+
+    private fun checkServerStatus() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val req = Request.Builder().url(GOOGLE_SCRIPT).get().build()
+                client.newCall(req).execute().use { res ->
+                    val ok = res.isSuccessful
+                    withContext(Dispatchers.Main) {
+                        serverStatusCard?.text = if (ok) "✅ متصل" else "❌ خطأ ${res.code}"
+                        serverStatusCard?.setTextColor(
+                            if (ok) Color.parseColor("#39FF8B") else Color.parseColor("#FF5577")
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    serverStatusCard?.text = "🔴 غير متصل"
+                    serverStatusCard?.setTextColor(Color.parseColor("#FF5577"))
+                }
+            }
+        }
+
+        // عرض آخر نشر من prefs
+        val lastPub = prefs.getString("published_build_id", "").orEmpty()
+        val lastVer = prefs.getString("last_success_version", "").orEmpty()
+        val lastUpdatedAt = prefs.getString("last_publish_time", "").orEmpty()
+        if (lastVer.isNotBlank() || lastPub.isNotBlank()) {
+            lastPublishCard?.text = if (lastVer.isNotBlank()) {
+                if (lastUpdatedAt.isNotBlank()) "$lastVer\n$lastUpdatedAt" else lastVer
+            } else "—"
+        } else {
+            lastPublishCard?.text = "لا يوجد\nنشر بعد"
+        }
+    }
+
+    private fun publishLatestSavedBuildToUsers() {
+        val apkUrl = prefs.getString("downloaded_apk_url", "").orEmpty()
+            .ifBlank { prefs.getString("last_success_apk_url", "").orEmpty() }
+        val versionCode = prefs.getString("downloaded_version_code", "").orEmpty()
+            .ifBlank { prefs.getString("last_success_version_code", "").orEmpty() }
+        val version = prefs.getString("downloaded_version", "").orEmpty()
+            .ifBlank { prefs.getString("last_success_version", "").orEmpty() }
+            .ifBlank { "LATCHI IPTV Update" }
+
+        if (apkUrl.isBlank() || versionCode.isBlank()) {
+            VipUiHelper.showWarningOverlay(
+                this,
+                title = "⚠️ لا يوجد Build محفوظ",
+                message = "افتح واجهة كود ماجيك، اجلب آخر بناء ناجح وحمّل الـ APK أولاً، ثم اضغط زر النشر العلوي من جديد.",
+                primaryText = "🧙 فتح كود ماجيك",
+                onPrimary = { startActivity(Intent(this, CodemagicCenterActivity::class.java)) },
+                secondaryText = "إلغاء",
+                onSecondary = {}
+            )
+            return
+        }
+
+        statusText?.text = "⏳ جاري نشر التحديث للمستخدمين..."
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = buildString {
+                    append(GOOGLE_SCRIPT)
+                    append("?action=set_app_update")
+                    append("&secret=").append(enc(ADMIN_SECRET))
+                    append("&version_code=").append(enc(versionCode))
+                    append("&version_name=").append(enc(version))
+                    append("&apk_url=").append(enc(apkUrl))
+                    append("&force_update=false")
+                    append("&notes_ar=").append(enc("تحديث جديد من LATCHI IPTV عبر لوحة التحكم."))
+                }
+                val request = Request.Builder().url(url).get().build()
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    val json = try { JSONObject(body) } catch (_: Exception) { JSONObject().put("success", false).put("message", body) }
+                    if (!response.isSuccessful || !json.optBoolean("success", false)) {
+                        throw Exception(json.optString("message", body))
+                    }
+                    val publishTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+                    prefs.edit()
+                        .putString("published_build_id", prefs.getString("downloaded_build_id", ""))
+                        .putString("last_publish_time", publishTime)
+                        .apply()
+                    withContext(Dispatchers.Main) {
+                        statusText?.text = "✅ تم نشر التحديث لكل المستخدمين: $version"
+                        lastPublishCard?.text = "$version\n$publishTime"
+                        VipUiHelper.showSuccessOverlay(
+                            this@MainActivity,
+                            title = "🚀 تم نشر التحديث",
+                            message = "الإصدار: $version\nالتاريخ: $publishTime\nتم إخطار كل المستخدمين في تطبيق المشاهدة ✓",
+                            primaryText = "حسناً",
+                            onPrimary = {}
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    statusText?.text = "❌ فشل النشر: ${e.localizedMessage}"
+                    VipUiHelper.showErrorOverlay(this@MainActivity, "❌ فشل النشر:\n${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    private fun enc(v: String): String = URLEncoder.encode(v, "UTF-8")
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+    private fun cardLp(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+}

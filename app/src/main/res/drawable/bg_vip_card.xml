@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="135"
+                android:startColor="@color/vip_panel"
+                android:endColor="@color/vip_panel_dark" />
+            <corners android:radius="20dp" />
+            <stroke android:width="1.2dp" android:color="@color/vip_neon_blue" />
+        </shape>
+    </item>
+    <!-- subtle inner glow line at top -->
+    <item android:top="-2dp" android:right="-2dp" android:left="-2dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="270"
+                android:startColor="#3D3DD8FF"
+                android:endColor="#003DD8FF" />
+            <corners
+                android:topLeftRadius="20dp"
+                android:topRightRadius="20dp" />
+        </shape>
+    </item>
+</layer-list>

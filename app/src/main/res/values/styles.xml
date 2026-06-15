@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AdminDashboard" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/vip_deep_navy</item>
+        <item name="android:navigationBarColor">@color/vip_deep_navy</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorPrimary">@color/vip_gold</item>
+        <item name="colorPrimaryDark">@color/vip_deep_navy</item>
+        <item name="colorAccent">@color/vip_icy_blue</item>
+        <item name="android:windowBackground">@drawable/bg_vip_gradient</item>
+    </style>
+
+    <style name="VipCardStyle">
+        <item name="android:background">@drawable/bg_vip_card</item>
+        <item name="android:padding">16dp</item>
+    </style>
+
+    <style name="VipPrimaryButtonStyle">
+        <item name="android:background">@drawable/bg_vip_btn_neon_blue</item>
+        <item name="android:textColor">@color/vip_text_on_gold</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:padding">14dp</item>
+    </style>
+
+    <style name="VipGoldButtonStyle">
+        <item name="android:background">@drawable/bg_vip_btn_gold</item>
+        <item name="android:textColor">@color/vip_text_on_gold</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:padding">14dp</item>
+    </style>
+
+    <style name="VipEditTextStyle">
+        <item name="android:background">@drawable/bg_vip_input</item>
+        <item name="android:textColor">@color/vip_text_primary</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+</resources>
