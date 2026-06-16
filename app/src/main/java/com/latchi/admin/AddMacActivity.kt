@@ -54,6 +54,7 @@ class AddMacActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
         buildUi()
     }
 
@@ -299,8 +300,9 @@ class AddMacActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val apiUrl = getSharedPreferences("admin_prefs", Context.MODE_PRIVATE).getString("apiUrl", GOOGLE_SCRIPT) ?: GOOGLE_SCRIPT
                 val url = buildString {
-                    append(GOOGLE_SCRIPT)
+                    append(apiUrl)
                     append("?action=add_code")
                     append("&secret=").append(enc(SECRET))
                     append("&code=").append(enc(code))

@@ -115,6 +115,8 @@ class AdminActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
         setContentView(R.layout.activity_main)
 
         screenAuth = findViewById(R.id.screenAuth)

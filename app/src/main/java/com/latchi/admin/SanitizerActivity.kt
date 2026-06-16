@@ -61,6 +61,7 @@ class SanitizerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
         buildUi()
     }
 
@@ -367,7 +368,7 @@ class SanitizerActivity : AppCompatActivity() {
     }
 
     private fun uploadToScript(file: File, linkExpiry: String): JSONObject {
-        val apiUrl = DEFAULT_API_URL
+        val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
         val content = file.readText(Charsets.UTF_8)
         val form = FormBody.Builder()
             .add("action", "upload_master_m3u")

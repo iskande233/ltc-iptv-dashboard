@@ -40,6 +40,8 @@ class UserListByServerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
         setContentView(R.layout.activity_user_list_by_server)
 
         btnBack = findViewById(R.id.btnBack)

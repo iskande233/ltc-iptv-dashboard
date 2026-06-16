@@ -50,6 +50,7 @@ class MasterLinkActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
         buildUi()
     }
 
@@ -254,11 +255,12 @@ class MasterLinkActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
                 val encUrl = URLEncoder.encode(masterUrl, "UTF-8")
                 val encLinkExpiry = URLEncoder.encode(linkExpiry, "UTF-8")
                 val encSecret = URLEncoder.encode(SECRET, "UTF-8")
 
-                val url = "$DEFAULT_API_URL?action=update_master_url&secret=$encSecret&master_url=$encUrl&link_expires_at=$encLinkExpiry"
+                val url = "$apiUrl?action=update_master_url&secret=$encSecret&master_url=$encUrl&link_expires_at=$encLinkExpiry"
                 val connection = URL(url).openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000

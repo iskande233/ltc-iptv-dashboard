@@ -51,6 +51,8 @@ class UserDetailControlActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
         setContentView(R.layout.activity_user_detail_control)
 
         userItem = intent.getParcelableExtra("userItem") ?: run { finish(); return }
@@ -135,7 +137,7 @@ class UserDetailControlActivity : AppCompatActivity() {
     }
 
     private fun getBaseUrl(): String {
-        return "https://script.google.com/macros/s/AKfycbzlzc-Ipjq7E9KPjpioJcNSV2OMle7Ma17GruKxqBJxk0k7ktNoM5C3Ko9st7yMS1p1/exec"
+        return getSharedPreferences("admin_prefs", Context.MODE_PRIVATE).getString("apiUrl", "https://script.google.com/macros/s/AKfycbzlzc-Ipjq7E9KPjpioJcNSV2OMle7Ma17GruKxqBJxk0k7ktNoM5C3Ko9st7yMS1p1/exec") ?: "https://script.google.com/macros/s/AKfycbzlzc-Ipjq7E9KPjpioJcNSV2OMle7Ma17GruKxqBJxk0k7ktNoM5C3Ko9st7yMS1p1/exec"
     }
 
     private fun executeToggleStatus() {

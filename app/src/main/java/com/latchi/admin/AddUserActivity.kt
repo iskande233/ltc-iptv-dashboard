@@ -64,6 +64,7 @@ class AddUserActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
         buildUi()
         genRandomCode()
     }
@@ -394,6 +395,7 @@ class AddUserActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
                 val encCode = URLEncoder.encode(code, "UTF-8")
                 val encName = URLEncoder.encode(name, "UTF-8")
                 val encPlaylist = URLEncoder.encode(playlist, "UTF-8")
@@ -401,7 +403,7 @@ class AddUserActivity : AppCompatActivity() {
                 val encLinkExpiry = URLEncoder.encode(linkExpiry, "UTF-8")
                 val encSecret = URLEncoder.encode(SECRET, "UTF-8")
 
-                val url = "$DEFAULT_API_URL?action=add_code&secret=$encSecret&code=$encCode&name=$encName&playlist_url=$encPlaylist&expires_at=$encExpiry&link_expires_at=$encLinkExpiry&max_devices=1"
+                val url = "$apiUrl?action=add_code&secret=$encSecret&code=$encCode&name=$encName&playlist_url=$encPlaylist&expires_at=$encExpiry&link_expires_at=$encLinkExpiry&max_devices=1"
                 val connection = URL(url).openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000
@@ -469,7 +471,9 @@ class AddUserActivity : AppCompatActivity() {
 
     private fun appendLog(line: String) {
         runOnUiThread {
-            txtLog.text = "✓ $line\n--------------------------------\n${txtLog.text}"
+            if (::txtLog.isInitialized) {
+                txtLog.text = "✓ $line\n--------------------------------\n${txtLog.text}"
+            }
         }
     }
 

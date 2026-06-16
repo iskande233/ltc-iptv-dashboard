@@ -21,6 +21,8 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -78,6 +80,7 @@ class CodemagicCenterActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VipUiHelper.applyWindowBackground(this)
+        AdminFloatingBackHelper.setup(this)
 
         if (cmToken().isBlank()) {
             prefs.edit().putString(PREFS_KEY_CM_TOKEN, "9OVMA35F09K3nv1djPFqSnQIQCKkq_b4_twyExdllp4").apply()
@@ -540,78 +543,102 @@ class CodemagicCenterActivity : AppCompatActivity() {
     }
 
     private fun downloadApk(buildId: String, appName: String, version: String, versionCode: String, apkUrl: String) {
-        try {
-            val directUrl = apkUrl.trim()
-            val safeVersion = version.ifBlank { buildId.takeLast(6) }.replace(Regex("[^A-Za-z0-9._-]"), "-")
-            val name = "${appName.ifBlank { "LATCHI" }}-$safeVersion.apk"
-                .replace("/", "-")
-                .replace(" ", "_")
-            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val req = DownloadManager.Request(Uri.parse(directUrl))
-                .setTitle("تحميل $appName")
-                .setDescription("APK للتجربة قبل النشر")
-                .setMimeType("application/vnd.android.package-archive")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-                .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(true)
-                .addRequestHeader("x-auth-token", cmToken())
-                .addRequestHeader("Accept", "application/octet-stream")
-            val downloadId = dm.enqueue(req)
-            status("⬇️ بدأ تحميل نسخة الآدمين... $name")
+        val directUrl = apkUrl.trim()
+        val safeVersion = version.ifBlank { buildId.takeLast(6) }.replace(Regex("[^A-Za-z0-9._-]"), "-")
+        val fileName = "${appName.ifBlank { "LATCHI" }}-$safeVersion.apk".replace("/", "-").replace(" ", "_")
+        
+        showProgress("جاري تحميل الـ APK من Codemagic... 0%")
+        status("⬇️ بدأ تحميل الـ APK... $fileName")
 
-            val receiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-                    if (id != downloadId) return
-                    try { unregisterReceiver(this) } catch (_: Exception) {}
+        Thread {
+            try {
+                val dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+                val file = File(dir, fileName).apply { parentFile?.mkdirs(); if (exists()) delete() }
+                
+                val req = Request.Builder()
+                    .url(directUrl)
+                    .header("x-auth-token", cmToken())
+                    .header("Accept", "application/octet-stream")
+                    .get()
+                    .build()
 
-                    val q = DownloadManager.Query().setFilterById(downloadId)
-                    dm.query(q)?.use { c ->
-                        if (c.moveToFirst()) {
-                            val st = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                            if (st == DownloadManager.STATUS_SUCCESSFUL) {
-                                prefs.edit()
-                                    .putString("downloaded_build_id", buildId)
-                                    .putString("downloaded_app_name", appName)
-                                    .putString("downloaded_version", version)
-                                    .putString("downloaded_version_code", versionCode)
-                                    .putString("downloaded_apk_url", directUrl)
-                                    .apply()
-                                val ctx = context as Activity
-                                ctx.runOnUiThread {
-                                    status("✅ تم تحميل نسخة الآدمين من Downloads")
-                                    VipUiHelper.showSuccessOverlay(
-                                        ctx,
-                                        title = "✅ تم تحميل APK",
-                                        message = "تم تحميل:\n$name\nمن مجلد Downloads.\nيمكنك تثبيته للتجربة قبل النشر.",
-                                        primaryText = "OK",
-                                        onPrimary = {}
-                                    )
-                                    if (selectedAppId.isNotBlank()) renderBuilds(selectedAppId, selectedAppName)
-                                }
-                            } else if (st == DownloadManager.STATUS_FAILED) {
-                                val reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                                val ctx = context as Activity
-                                ctx.runOnUiThread {
-                                    status("❌ فشل تحميل APK. السبب: $reason")
-                                    VipUiHelper.showErrorOverlay(ctx, "❌ فشل التحميل:\nالسبب: $reason")
+                val okClient = OkHttpClient.Builder()
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                okClient.newCall(req).execute().use { response ->
+                    if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+                    val body = response.body ?: throw Exception("Empty body")
+                    val total = body.contentLength()
+                    val input = body.byteStream()
+                    val output = file.outputStream()
+
+                    var copied = 0L
+                    val buffer = ByteArray(16 * 1024)
+                    var read: Int
+                    var lastUpdate = System.currentTimeMillis()
+
+                    input.use { inStream ->
+                        output.use { outStream ->
+                            while (inStream.read(buffer).also { read = it } >= 0) {
+                                outStream.write(buffer, 0, read)
+                                copied += read
+                                
+                                val now = System.currentTimeMillis()
+                                if (total > 0 && now - lastUpdate > 300) {
+                                    lastUpdate = now
+                                    val percent = ((copied * 100) / total).toInt().coerceIn(0, 100)
+                                    runOnUiThread {
+                                        progressStatus.text = "جاري تحميل الـ APK... $percent%"
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
+                prefs.edit()
+                    .putString("downloaded_build_id", buildId)
+                    .putString("downloaded_app_name", appName)
+                    .putString("downloaded_version", version)
+                    .putString("downloaded_version_code", versionCode)
+                    .putString("downloaded_apk_url", directUrl)
+                    .apply()
+
+                runOnUiThread {
+                    hideProgress()
+                    status("✅ تم تحميل الـ APK بنجاح")
+                    
+                    val uri = FileProvider.getUriForFile(this@CodemagicCenterActivity, "com.latchi.admin.provider", file)
+                    VipUiHelper.showSuccessOverlay(
+                        this@CodemagicCenterActivity,
+                        title = "✅ اكتمل التحميل 100%",
+                        message = "تم تخزين التطبيق مباشرة عندك:\n$fileName\n\nيمكنك تثبيته مباشرة للتجربة أو نشره للمستخدمين.",
+                        primaryText = "📲 تثبيت الآن",
+                        onPrimary = {
+                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "application/vnd.android.package-archive")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(installIntent)
+                        },
+                        secondaryText = "🚀 نشر للمستخدمين",
+                        onSecondary = {
+                            publishBuild(buildId, version, versionCode, directUrl)
+                        }
+                    )
+                    if (selectedAppId.isNotBlank()) renderBuilds(selectedAppId, selectedAppName)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    hideProgress()
+                    status("❌ فشل التحميل: ${e.localizedMessage}")
+                    VipUiHelper.showErrorOverlay(this@CodemagicCenterActivity, "❌ فشل تحميل الـ APK:\n${e.localizedMessage}")
+                }
             }
-            val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-            } else {
-                @Suppress("DEPRECATION")
-                registerReceiver(receiver, filter)
-            }
-        } catch (e: Exception) {
-            status("❌ فشل بدء التحميل: ${e.localizedMessage}")
-        }
+        }.start()
     }
 
     private fun publishBuild(buildId: String, version: String, versionCode: String, apkUrl: String) {
