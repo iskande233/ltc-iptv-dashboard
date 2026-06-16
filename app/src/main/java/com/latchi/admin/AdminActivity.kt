@@ -83,6 +83,7 @@ class AdminActivity : AppCompatActivity() {
     private lateinit var inputRawSanitizeUrl: EditText
     private lateinit var btnSanitizeSubmit: TextView
     private lateinit var btnOpenServers: TextView
+    private lateinit var btnIncrementServerRevision: TextView
     private lateinit var btnGeminiChat: TextView
     private lateinit var txtAdminLog: TextView
     private lateinit var adminVoiceOverlay: FrameLayout
@@ -140,6 +141,7 @@ class AdminActivity : AppCompatActivity() {
         inputRawSanitizeUrl = findViewById(R.id.inputRawSanitizeUrl)
         btnSanitizeSubmit = findViewById(R.id.btnSanitizeSubmit)
         btnOpenServers = findViewById(R.id.btnOpenServers)
+        btnIncrementServerRevision = findViewById(R.id.btnIncrementServerRevision)
         btnGeminiChat = findViewById(R.id.btnGeminiChat)
         txtAdminLog = findViewById(R.id.txtAdminLog)
         adminVoiceOverlay = findViewById(R.id.adminVoiceOverlay)
@@ -187,6 +189,7 @@ class AdminActivity : AppCompatActivity() {
         btnAddCodeSubmit.setOnClickListener { submitNewCode() }
         btnMasterUrlSubmit.setOnClickListener { submitMasterUrl() }
         btnSanitizeSubmit.setOnClickListener { executeTrueStandaloneSanitize() }
+        btnIncrementServerRevision.setOnClickListener { incrementServerRevision() }
         btnOpenServers.setOnClickListener {
             saveApiUrl()
             startActivity(Intent(this, ServerListActivity::class.java))
@@ -454,6 +457,34 @@ class AdminActivity : AppCompatActivity() {
                     pd.dismiss()
                     txtSmartUpdateStatus?.text = "فشل نشر التحديث: ${e.localizedMessage}"
                     logMessage("❌ فشل نشر التحديث: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    private fun incrementServerRevision() {
+        val apiUrl = saveApiUrl()
+        val pd = showProgressDialog("تحديث السيرفر للمستخدمين", "جاري رفع رقم إصدار السيرفر (Server Revision) في Google Script...\nسيقوم تطبيق المشاهدة لدى كل المستخدمين بمسح الكاش وإعادة جلب القنوات تلقائياً ⚡")
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val encSecret = URLEncoder.encode("LatchiAdmin2026", "UTF-8")
+                val url = "$apiUrl?action=increment_server_revision&secret=$encSecret"
+                val req = Request.Builder().url(url).get().build()
+                client.newCall(req).execute().use { res ->
+                    val txt = res.body?.string().orEmpty()
+                    val json = try { JSONObject(txt) } catch (_: Exception) { JSONObject().put("success", false).put("message", txt) }
+                    if (!res.isSuccessful || !json.optBoolean("success", false)) throw Exception(json.optString("message", txt))
+                    withContext(Dispatchers.Main) {
+                        pd.dismiss()
+                        val newRev = json.optLong("newRevision", json.optLong("revision", json.optLong("server_revision", 1)))
+                        logMessage("✅ تم رفع إصدار السيرفر بنجاح إلى: $newRev\nسيقوم تطبيق المشاهدة بتطبيق التحديث فوراً عند المستخدمين ✓")
+                        Toast.makeText(this@AdminActivity, "تم تعميم تحديث السيرفر (Revision $newRev) ✓", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    pd.dismiss()
+                    logMessage("❌ فشل تحديث إصدار السيرفر: ${e.localizedMessage}")
                 }
             }
         }
@@ -956,6 +987,11 @@ class AdminActivity : AppCompatActivity() {
             listOf("رابط", "link", "server", "serveur", "سيرفر", "m3u", "xtream").any { text.contains(it) } -> {
                 inputMasterUrl.requestFocus()
                 output.text = "ℹ️ فهمت أمر الرابط/السيرفر. ألصق الرابط في خانة السيرفر الموحد، واكتب تاريخ النهاية إذا موجود، ثم اضغط تعميم."
+            }
+            listOf("تحديث السيرفر", "revision", "فرض التحديث", "تحديث اجباري", "إجبار", "ميزاجور").any { text.contains(it) } -> {
+                dialog.dismiss()
+                incrementServerRevision()
+                output.text = "✅ جاري فرض تحديث السيرفر على جميع المستخدمين..."
             }
             listOf("غربل", "نقي", "فلتر", "sanitize", "filter", "صفي").any { text.contains(it) } -> {
                 inputRawSanitizeUrl.requestFocus()
