@@ -55,7 +55,7 @@ class AdminActivity : AppCompatActivity() {
 
 
     companion object {
-        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzlzc-Ipjq7E9KPjpioJcNSV2OMle7Ma17GruKxqBJxk0k7ktNoM5C3Ko9st7yMS1p1/exec"
+        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbycNO9V5P4jbHQFNDZeQM0FJwqhSlCJMxXV3mCzqrJXM3hYG9JCtUk0tow6bm6Ijsv8/exec"
         private const val CODEMAGIC_APP_ID = "6a2f44c281e1113131cea8f9"
         private const val CODEMAGIC_WORKFLOW_ID = "android-admin-dashboard"
     }

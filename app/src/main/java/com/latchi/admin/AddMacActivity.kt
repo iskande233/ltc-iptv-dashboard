@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit
 class AddMacActivity : AppCompatActivity() {
 
     companion object {
-        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbzlzc-Ipjq7E9KPjpioJcNSV2OMle7Ma17GruKxqBJxk0k7ktNoM5C3Ko9st7yMS1p1/exec"
+        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbycNO9V5P4jbHQFNDZeQM0FJwqhSlCJMxXV3mCzqrJXM3hYG9JCtUk0tow6bm6Ijsv8/exec"
         private const val SECRET = "LatchiAdmin2026"
     }
 

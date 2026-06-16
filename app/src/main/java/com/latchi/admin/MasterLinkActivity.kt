@@ -20,9 +20,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import okhttp3.OkHttpClient
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 
 /**
  * واجهة تعميم السيرفر الموحد — صفحة مستقلة تماماً.
@@ -33,7 +35,7 @@ import java.net.URLEncoder
 class MasterLinkActivity : AppCompatActivity() {
 
     companion object {
-        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzlzc-Ipjq7E9KPjpioJcNSV2OMle7Ma17GruKxqBJxk0k7ktNoM5C3Ko9st7yMS1p1/exec"
+        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbycNO9V5P4jbHQFNDZeQM0FJwqhSlCJMxXV3mCzqrJXM3hYG9JCtUk0tow6bm6Ijsv8/exec"
         private const val SECRET = "LatchiAdmin2026"
     }
 
@@ -130,7 +132,41 @@ class MasterLinkActivity : AppCompatActivity() {
             this, "🧹 مسح", VipUiHelper.BtnVariant.NEON_PURPLE
         ) { inputMasterUrl.setText("") }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(6) })
         urlRow.addView(VipUiHelper.buildMiniButton(
-            this, "📤 إرسال للتطبيق", VipUiHelper.BtnVariant.NEON_GREEN
+            this, "🔎 اختبار", VipUiHelper.BtnVariant.GOLD
+        ) {
+            val url = inputMasterUrl.text.toString().trim()
+            if (url.isBlank()) {
+                VipUiHelper.showErrorOverlay(this, "ألصق الرابط أولاً لاختباره.")
+            } else {
+                showProgress("جاري فحص استجابة السيرفر...")
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val req = okhttp3.Request.Builder().url(url.replace("&amp;", "&")).get().build()
+                        OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build().newCall(req).execute().use { res ->
+                            val code = res.code
+                            withContext(Dispatchers.Main) {
+                                hideProgress()
+                                if (res.isSuccessful) {
+                                    appendLog("✅ السيرفر شغال ومستقر (HTTP $code)")
+                                    VipUiHelper.showSuccessOverlay(this@MasterLinkActivity, "✅ السيرفر شغال", "السيرفر أونلاين ومستقر (HTTP $code).\nيمكنك تعميمه الآن بأمان ✓", "حسناً", {})
+                                } else {
+                                    appendLog("❌ السيرفر لا يستجيب بالشكل الصحيح (HTTP $code)")
+                                    VipUiHelper.showWarningOverlay(this@MasterLinkActivity, "⚠️ السيرفر يعطي خطأ", "السيرفر أرجع الخطأ (HTTP $code). تأكد من الرابط.", "حسناً", {})
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            hideProgress()
+                            appendLog("❌ السيرفر معطوب أو لا يستجيب: ${e.localizedMessage}")
+                            VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ السيرفر لا يستجيب:\n${e.localizedMessage}")
+                        }
+                    }
+                }
+            }
+        }, LinearLayout.LayoutParams(0, dp(40), 1.2f).apply { marginStart = dp(6) })
+        urlRow.addView(VipUiHelper.buildMiniButton(
+            this, "📤 للتطبيق", VipUiHelper.BtnVariant.NEON_GREEN
         ) {
             val url = inputMasterUrl.text.toString().trim()
             if (url.isNotBlank()) {
@@ -147,7 +183,7 @@ class MasterLinkActivity : AppCompatActivity() {
                         "حسناً", {}, null, null)
                 }
             }
-        }, LinearLayout.LayoutParams(0, dp(40), 1.5f).apply { marginStart = dp(6) })
+        }, LinearLayout.LayoutParams(0, dp(40), 1.3f).apply { marginStart = dp(6) })
         urlContainer.addView(urlRow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
