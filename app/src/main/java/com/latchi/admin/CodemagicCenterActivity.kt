@@ -428,7 +428,19 @@ class CodemagicCenterActivity : AppCompatActivity() {
                     ) {
                         downloadApk(id, appName, version, versionCode, apkUrl)
                     },
-                    LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(6) }
+                    LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) }
+                )
+                row2.addView(
+                    VipUiHelper.buildMiniButton(
+                        this@CodemagicCenterActivity,
+                        "📋 نسخ",
+                        VipUiHelper.BtnVariant.NEON_PURPLE
+                    ) {
+                        val cb = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cb.setPrimaryClip(android.content.ClipData.newPlainText("codemagic_apk_url", apkUrl))
+                        Toast.makeText(this@CodemagicCenterActivity, "تم نسخ رابط الـ APK المباشر إلى الحافظة ✓", Toast.LENGTH_SHORT).show()
+                    },
+                    LinearLayout.LayoutParams(0, dp(48), 1.1f).apply { marginStart = dp(4); marginEnd = dp(4) }
                 )
                 row2.addView(
                     VipUiHelper.buildMiniButton(
@@ -438,11 +450,11 @@ class CodemagicCenterActivity : AppCompatActivity() {
                     ) {
                         publishBuild(id, version, versionCode, apkUrl)
                     },
-                    LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(6) }
+                    LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(4) }
                 )
                 addView(row2)
                 addView(TextView(this@CodemagicCenterActivity).apply {
-                    text = "⬇️ تحميل = APK للآدمين للتجربة\n🚀 نشر = يرسل الرابط للمستخدمين"
+                    text = "⬇️ تحميل = APK للآدمين للتجربة\n📋 نسخ = نسخ الرابط الخارجي المباشر للحافظة\n🚀 نشر = يرسل الرابط للمستخدمين"
                     setTextColor(Color.parseColor("#7A82A8"))
                     textSize = 11f
                     setPadding(0, dp(8), 0, 0)
