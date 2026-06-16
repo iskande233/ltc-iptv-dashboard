@@ -382,7 +382,7 @@ class AddUserActivity : AppCompatActivity() {
     private fun submitNewCode() {
         val code = inputNewCode.text.toString().trim()
         val name = inputUserName.text.toString().trim()
-        val playlist = inputUserPlaylist.text.toString().trim()
+        val playlist = inputUserPlaylist.text.toString().replace(" ", "").replace("&amp;", "&").trim()
         val linkExpiry = inputLinkExpiry.text.toString().trim()
 
         if (code.isBlank() || name.isBlank()) {

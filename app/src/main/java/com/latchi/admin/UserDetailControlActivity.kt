@@ -220,7 +220,7 @@ class UserDetailControlActivity : AppCompatActivity() {
                     inputName.text.toString(),
                     inputMaxDev.text.toString().toIntOrNull() ?: 1,
                     AdminExpiryHelper.normalizedOrBlank(inputExpiry.text.toString()),
-                    inputPlaylist.text.toString(),
+                    inputPlaylist.text.toString().replace(" ", "").replace("&amp;", "&").trim(),
                     AdminExpiryHelper.normalizedOrBlank(inputLinkExpiry.text.toString())
                 )
             }
@@ -229,13 +229,14 @@ class UserDetailControlActivity : AppCompatActivity() {
     }
 
     private fun executeEditUser(name: String, maxDev: Int, expiry: String, playlist: String, linkExpiry: String) {
+        val cleanPlaylist = playlist.replace(" ", "").replace("&amp;", "&").trim()
         val pd = showProgressDialog(getString(R.string.edit_account_title), "جارِ حفظ التعديلات في Google Sheets...")
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val encCode = URLEncoder.encode(userItem.code, "UTF-8")
                 val encName = URLEncoder.encode(name, "UTF-8")
                 val encExpiry = URLEncoder.encode(expiry, "UTF-8")
-                val encPlaylist = URLEncoder.encode(playlist, "UTF-8")
+                val encPlaylist = URLEncoder.encode(cleanPlaylist, "UTF-8")
                 val encLinkExpiry = URLEncoder.encode(linkExpiry, "UTF-8")
                 val encSecret = URLEncoder.encode("LatchiAdmin2026", "UTF-8")
 
@@ -250,7 +251,7 @@ class UserDetailControlActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     pd.dismiss()
                     if (success) {
-                        userItem = userItem.copy(name = name, maxDevices = maxDev, expiresAt = expiry, playlistUrl = playlist, linkExpiresAt = linkExpiry)
+                        userItem = userItem.copy(name = name, maxDevices = maxDev, expiresAt = expiry, playlistUrl = cleanPlaylist, linkExpiresAt = linkExpiry)
                         populateDetails()
                         Toast.makeText(this@UserDetailControlActivity, getString(R.string.changes_saved_success), Toast.LENGTH_LONG).show()
                     } else Toast.makeText(this@UserDetailControlActivity, getString(R.string.error_prefix, json.optString("message")), Toast.LENGTH_LONG).show()

@@ -134,14 +134,14 @@ class MasterLinkActivity : AppCompatActivity() {
         urlRow.addView(VipUiHelper.buildMiniButton(
             this, "🔎 اختبار", VipUiHelper.BtnVariant.GOLD
         ) {
-            val url = inputMasterUrl.text.toString().trim()
+            val url = inputMasterUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
             if (url.isBlank()) {
                 VipUiHelper.showErrorOverlay(this, "ألصق الرابط أولاً لاختباره.")
             } else {
                 showProgress("جاري فحص استجابة السيرفر...")
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val req = okhttp3.Request.Builder().url(url.replace("&amp;", "&")).get().build()
+                        val req = okhttp3.Request.Builder().url(url).get().build()
                         OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build().newCall(req).execute().use { res ->
                             val code = res.code
                             withContext(Dispatchers.Main) {
@@ -168,7 +168,7 @@ class MasterLinkActivity : AppCompatActivity() {
         urlRow.addView(VipUiHelper.buildMiniButton(
             this, "📤 للتطبيق", VipUiHelper.BtnVariant.NEON_GREEN
         ) {
-            val url = inputMasterUrl.text.toString().trim()
+            val url = inputMasterUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
             if (url.isNotBlank()) {
                 try {
                     val i = Intent(Intent.ACTION_VIEW, Uri.parse("latchiiptv://master?url=" + URLEncoder.encode(url, "UTF-8"))).apply {
@@ -278,7 +278,7 @@ class MasterLinkActivity : AppCompatActivity() {
     }
 
     private fun submitMasterUrl() {
-        val masterUrl = inputMasterUrl.text.toString().trim()
+        val masterUrl = inputMasterUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
         val linkExpiry = inputMasterExpiry.text.toString().trim()
 
         if (masterUrl.isBlank()) {
