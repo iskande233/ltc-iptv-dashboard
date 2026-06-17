@@ -29,6 +29,7 @@
 
         <!-- 🛠️ Admin Tools — كل واحدة بصفحة مستقلة (الإصلاح الكارثي) -->
         <activity android:name=".SanitizerActivity" android:exported="false" />
+        <activity android:name=".XtreamTesterActivity" android:exported="false" />
         <activity android:name=".AddUserActivity" android:exported="false" />
         <activity android:name=".MasterLinkActivity" android:exported="false" />
         <activity android:name=".AddMacActivity" android:exported="false" />

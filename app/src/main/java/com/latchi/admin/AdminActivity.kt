@@ -197,6 +197,11 @@ class AdminActivity : AppCompatActivity() {
             startActivity(Intent(this, ServerListActivity::class.java))
         }
         btnGeminiChat.setOnClickListener { showGeminiAssistantDialog() }
+
+        // ✅ زر فاحص الأكواد الذكي
+        findViewById<TextView?>(R.id.btnXtreamTester)?.setOnClickListener {
+            startActivity(Intent(this, XtreamTesterActivity::class.java))
+        }
     }
 
     private fun scrollToView(view: View) {
@@ -998,6 +1003,11 @@ class AdminActivity : AppCompatActivity() {
             listOf("غربل", "نقي", "فلتر", "sanitize", "filter", "صفي").any { text.contains(it) } -> {
                 inputRawSanitizeUrl.requestFocus()
                 output.text = "✅ فهمت: الغربلة الذكية. ألصق رابط M3U/Xtream الخام في خانة الغربال ثم اضغط الغربلة والتعميم."
+            }
+            listOf("فاحص", "اختبر", "test", "xtream", "جرب الروابط").any { text.contains(it) } -> {
+                dialog.dismiss()
+                startActivity(Intent(this, XtreamTesterActivity::class.java))
+                output.text = "✅ فتحتلك فاحص الأكواد الذكي"
             }
             listOf("ساعدني", "help", "aide", "واش تقدر", "الأوامر", "اوامر").any { text.contains(it) } -> {
                 output.text = "🎙️ نقدر نفهم الدارجة الجزائرية في أوامر الإدارة:\n• ديرلي مستخدم جديد\n• كود جديد\n• وريني الإحصائيات\n• امسح الكود 123456\n• افتح المستخدمين\n• نحي/حذف كود\n• رابط جديد / تاريخ نهاية الرابط\n• غربل رابط M3U"
