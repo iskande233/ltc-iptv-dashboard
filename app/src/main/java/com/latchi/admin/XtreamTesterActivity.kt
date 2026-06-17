@@ -739,16 +739,18 @@ class XtreamTesterActivity : AppCompatActivity() {
         }
 
         tvGeminiOutput.text = "🧠 Gemini يفكر..."
-        val text = cmd.lowercase()
+        val text = cmd.lowercase(java.util.Locale.getDefault())
 
-        // معالجة الأوامر بشكل ذكي
         when {
-            // "وريني الشغالين فقط"
-            listOf("شغال", "online", "يشتغل", "actif", "working").any { text.contains(it) } &&
-                    listOf("وريني", "عرض", "فقط", "show", "filter").any { text.contains(it) } -> {
+
+            // ══════════════════════════════════════════════
+            // 1) عرض الشغالين فقط
+            // ══════════════════════════════════════════════
+            listOf("شغال", "online", "يشتغل", "actif", "working", "تيسري").any { text.contains(it) } &&
+            listOf("وريني", "عرض", "فقط", "show", "filter", "سير").any { text.contains(it) } -> {
                 val online = results.filter { it.online }
                 if (online.isEmpty()) {
-                    tvGeminiOutput.text = "😔 لا يوجد أي رابط شغال!"
+                    tvGeminiOutput.text = "😔 والله ما كاين رابط شغال!"
                 } else {
                     llResultsContainer.removeAllViews()
                     online.forEachIndexed { i, r -> addResultCard(r, i) }
@@ -756,95 +758,283 @@ class XtreamTesterActivity : AppCompatActivity() {
                 }
             }
 
-            // "وريني الميتين"
-            listOf("ميت", "dead", "offline", "مات", "فاشل").any { text.contains(it) } -> {
+            // ══════════════════════════════════════════════
+            // 2) "سير تيسريهم قاع" — فحص كامل للكل
+            // ══════════════════════════════════════════════
+            listOf("سير تيسري", "تيسريهم", "فحص الكل", "check all", "اختبر الكل").any { text.contains(it) } -> {
+                tvGeminiOutput.text = "⚡ جاري فحص كل الروابط من جديد..."
+                startBatchTest()
+            }
+
+            // ══════════════════════════════════════════════
+            // 3) عرض الميتين / المتبلوكين
+            // ══════════════════════════════════════════════
+            listOf("ميت", "dead", "offline", "مات", "فاشل", "تبلوك", "blocked", "عالق").any { text.contains(it) } -> {
                 val dead = results.filter { !it.online }
                 if (dead.isEmpty()) {
-                    tvGeminiOutput.text = "🎉 كل الروابط شغالة! لا يوجد ميت"
+                    tvGeminiOutput.text = "🎉 والله ما كاين رابط ميت! كلهم شغالين"
                 } else {
                     llResultsContainer.removeAllViews()
                     dead.forEachIndexed { i, r -> addResultCard(r, i) }
-                    tvGeminiOutput.text = "❌ عرضت ${dead.size} رابط ميت"
+                    tvGeminiOutput.text = "❌ عرضت ${dead.size} رابط ميت / متبلوك"
                 }
             }
 
-            // "رتب حسب القنوات"
-            listOf("رتب", "ترتيب", "sort", "trier", "أحسن").any { text.contains(it) } -> {
-                val sorted = results.sortedWith(compareByDescending<TestResult> { it.online }.thenByDescending { it.channelCount })
+            // ══════════════════════════════════════════════
+            // 4) "طيرلي قاع الروابط الميتة" — حذفهم
+            // ══════════════════════════════════════════════
+            listOf("طيرلي", "احذف", "حذف", "امسح", "نحي", "remove", "طير").any { text.contains(it) } &&
+            listOf("ميت", "dead", "offline", "فاشل", "قاع").any { text.contains(it) } -> {
+                val before = results.size
+                results.removeAll { !it.online }
                 llResultsContainer.removeAllViews()
-                sorted.forEachIndexed { i, r -> addResultCard(r, i) }
-                tvGeminiOutput.text = "✅ تم الترتيب: الشغالين أولاً ثم حسب عدد القنوات"
+                results.forEachIndexed { i, r -> addResultCard(r, i) }
+                val removed = before - results.size
+                tvGeminiOutput.text = "🗑️ طرت $removed رابط ميت\nتبقى ${results.size} رابط شغال ✅"
             }
 
-            // "عمّم أحسن رابط"
-            listOf("عمم", "عمّم", "broadcast", "أحسن", "الأفضل", "best").any { text.contains(it) } -> {
-                val best = results.filter { it.online }.maxByOrNull { it.channelCount }
+            // ══════════════════════════════════════════════
+            // 5) "افرزلي" / رتب حسب القنوات أو البورت
+            // ══════════════════════════════════════════════
+            listOf("افرزلي", "فرز", "رتب", "ترتيب", "sort", "trier").any { text.contains(it) } -> {
+                when {
+                    listOf("بورت", "port", "منفذ").any { text.contains(it) } -> {
+                        // ترتيب حسب البورت
+                        val sorted = results.sortedWith(
+                            compareByDescending<TestResult> { it.online }
+                                .thenBy { extractPort(it.url) }
+                        )
+                        llResultsContainer.removeAllViews()
+                        sorted.forEachIndexed { i, r -> addResultCard(r, i) }
+                        tvGeminiOutput.text = "✅ مفروزين حسب البورت\n:80 → :8080 → :25461..."
+                    }
+                    listOf("سرعة", "speed", "وقت", "أسرع").any { text.contains(it) } -> {
+                        val sorted = results.sortedWith(
+                            compareByDescending<TestResult> { it.online }
+                                .thenBy { if (it.responseMs > 0) it.responseMs else Long.MAX_VALUE }
+                        )
+                        llResultsContainer.removeAllViews()
+                        sorted.forEachIndexed { i, r -> addResultCard(r, i) }
+                        tvGeminiOutput.text = "✅ مفروزين حسب السرعة — الأسرع أول ⚡"
+                    }
+                    else -> {
+                        // افتراضي: حسب القنوات
+                        val sorted = results.sortedWith(
+                            compareByDescending<TestResult> { it.online }
+                                .thenByDescending { it.channelCount }
+                        )
+                        llResultsContainer.removeAllViews()
+                        sorted.forEachIndexed { i, r -> addResultCard(r, i) }
+                        tvGeminiOutput.text = "✅ مفروزين — الشغالين أول ثم حسب عدد القنوات 📺"
+                    }
+                }
+            }
+
+            // ══════════════════════════════════════════════
+            // 6) "امشي دير هذا هو السيرفر الرئيسي"
+            //    / "عمّم أحسن رابط"
+            // ══════════════════════════════════════════════
+            listOf("عمم", "عمّم", "امشي دير", "السيرفر الرئيسي", "broadcast",
+                   "أحسن", "الأفضل", "best", "الرئيسي").any { text.contains(it) } -> {
+                val best = results.filter { it.online }
+                    .maxWithOrNull(compareBy({ it.channelCount }, { -it.responseMs }))
                 if (best == null) {
-                    tvGeminiOutput.text = "😔 لا يوجد رابط شغال للتعميم!"
+                    tvGeminiOutput.text = "😔 ما كاين رابط شغال للتعميم!"
                 } else {
-                    tvGeminiOutput.text = "🎯 أحسن رابط: ${shortUrl(best.url)}\n${if (best.expiry.isNotBlank()) "📅 ${best.expiry}" else ""}\n\nسأعمّمه الآن..."
+                    tvGeminiOutput.text = "🎯 أحسن رابط:\n${shortUrl(best.url)}" +
+                        (if (best.expiry.isNotBlank()) "\n📅 ${best.expiry}" else "") +
+                        (if (best.channelCount > 0) "\n📺 ${best.channelCount} قناة" else "") +
+                        "\n\nنعمّمه الحين..."
                     confirmAndBroadcast(best)
                 }
             }
 
-            // "وريني الكل"
-            listOf("الكل", "كل", "all", "tout", "إظهار الكل").any { text.contains(it) } -> {
+            // ══════════════════════════════════════════════
+            // 7) "جبدلي اليوزر والباص" — استخراج بيانات
+            // ══════════════════════════════════════════════
+            listOf("جبدلي", "استخرج", "اليوزر", "الباص", "username", "password",
+                   "extract", "بيانات").any { text.contains(it) } -> {
+                val sb = StringBuilder("📋 بيانات الروابط الشغالة:\n\n")
+                results.filter { it.online }.forEach { r ->
+                    try {
+                        val uri = java.net.URI(r.url)
+                        val params = (uri.rawQuery ?: "").split("&").mapNotNull {
+                            val kv = it.split("=", limit = 2)
+                            if (kv.size == 2) kv[0] to java.net.URLDecoder.decode(kv[1], "UTF-8") else null
+                        }.toMap()
+                        val user = params["username"] ?: "—"
+                        val pass = params["password"] ?: "—"
+                        val host = "${uri.host}:${if (uri.port > 0) uri.port else 80}"
+                        sb.append("🌐 $host\n👤 $user\n🔐 $pass\n")
+                        if (r.expiry.isNotBlank()) sb.append("📅 ${r.expiry}\n")
+                        sb.append("─────────────\n")
+                    } catch (_: Exception) {}
+                }
+                tvGeminiOutput.text = if (results.any { it.online }) sb.toString()
+                                      else "😔 ما كاين رابط شغال لاستخراج البيانات"
+            }
+
+            // ══════════════════════════════════════════════
+            // 8) "خرجلي برك الهوست" — Host فقط
+            // ══════════════════════════════════════════════
+            listOf("خرجلي", "الهوست", "host", "الدومين", "domain", "الآيبي", "ip").any { text.contains(it) } -> {
+                val hosts = results.filter { it.online }.mapNotNull {
+                    try {
+                        val uri = java.net.URI(it.url)
+                        "${uri.host}:${if (uri.port > 0) uri.port else 80}"
+                    } catch (_: Exception) { null }
+                }.distinct()
+                if (hosts.isEmpty()) {
+                    tvGeminiOutput.text = "😔 ما كاين رابط شغال"
+                } else {
+                    tvGeminiOutput.text = "🌐 الهوستات الشغالة:\n\n" + hosts.joinToString("\n")
+                }
+            }
+
+            // ══════════════════════════════════════════════
+            // 9) "شكون اللي يموتوا هذا الشهر؟"
+            // ══════════════════════════════════════════════
+            listOf("شكون", "يموتوا", "هذا الشهر", "ينتهوا", "expire", "تنتهي",
+                   "قريب", "ينتهي", "قريبة").any { text.contains(it) } -> {
+                val days = when {
+                    listOf("اليوم", "today").any { text.contains(it) } -> 1
+                    listOf("أسبوع", "week", "7").any { text.contains(it) } -> 7
+                    listOf("شهر", "month", "30").any { text.contains(it) } -> 30
+                    else -> 7
+                }
+                val expiring = results.filter { r ->
+                    r.online && r.expiry.isNotBlank() && isExpiringInDays(r.expiry, days)
+                }
+                if (expiring.isEmpty()) {
+                    tvGeminiOutput.text = "✅ ما كاين رابط ينتهي خلال $days يوم"
+                } else {
+                    llResultsContainer.removeAllViews()
+                    expiring.forEachIndexed { i, r -> addResultCard(r, i) }
+                    tvGeminiOutput.text = "⚠️ ${expiring.size} رابط ينتهيوا خلال $days يوم!"
+                }
+            }
+
+            // ══════════════════════════════════════════════
+            // 10) "كاين رابط مكرر؟" — إزالة المكررات
+            // ══════════════════════════════════════════════
+            listOf("مكرر", "duplicate", "كاش", "مكررات", "متشابه").any { text.contains(it) } -> {
+                val before = results.size
+                val seen = mutableSetOf<String>()
+                val unique = results.filter { r ->
+                    val key = try {
+                        val uri = java.net.URI(r.url)
+                        val params = (uri.rawQuery ?: "").split("&").mapNotNull {
+                            val kv = it.split("=", limit = 2)
+                            if (kv.size == 2) kv[0] to kv[1] else null
+                        }.toMap()
+                        "${uri.host}:${uri.port}|${params["username"]}"
+                    } catch (_: Exception) { r.url }
+                    seen.add(key)
+                }
+                results.clear()
+                results.addAll(unique)
+                llResultsContainer.removeAllViews()
+                results.forEachIndexed { i, r -> addResultCard(r, i) }
+                tvGeminiOutput.text = "🧹 نظفت ${before - results.size} رابط مكرر\nتبقى ${results.size} رابط فريد ✅"
+            }
+
+            // ══════════════════════════════════════════════
+            // 11) "أعطيني الخلاص الكاملا" — ملخص شامل
+            // ══════════════════════════════════════════════
+            listOf("خلاص", "ملخص", "إحصاء", "إحصائيات", "stats",
+                   "summary", "rapport", "كامل").any { text.contains(it) } -> {
+                autoGeminiSummary()
+            }
+
+            // ══════════════════════════════════════════════
+            // 12) "قلب هذا الرابط لـ Xtream" — تحويل
+            // ══════════════════════════════════════════════
+            listOf("قلب", "حول", "convert", "xtream", "لوحة التحكم").any { text.contains(it) } -> {
+                val sb = StringBuilder("🔄 الروابط بصيغة Xtream:\n\n")
+                results.filter { it.online }.forEach { r ->
+                    try {
+                        val uri = java.net.URI(r.url)
+                        val params = (uri.rawQuery ?: "").split("&").mapNotNull {
+                            val kv = it.split("=", limit = 2)
+                            if (kv.size == 2) kv[0] to java.net.URLDecoder.decode(kv[1], "UTF-8") else null
+                        }.toMap()
+                        sb.append("🌐 Server: ${uri.scheme}://${uri.host}:${if (uri.port > 0) uri.port else 80}\n")
+                        sb.append("👤 User: ${params["username"] ?: "—"}\n")
+                        sb.append("🔐 Pass: ${params["password"] ?: "—"}\n")
+                        sb.append("─────────────\n")
+                    } catch (_: Exception) {}
+                }
+                tvGeminiOutput.text = sb.toString()
+            }
+
+            // ══════════════════════════════════════════════
+            // 13) وريني الكل
+            // ══════════════════════════════════════════════
+            listOf("الكل", "كل", "all", "tout", "قاع").any { text.contains(it) } -> {
                 llResultsContainer.removeAllViews()
                 results.forEachIndexed { i, r -> addResultCard(r, i) }
                 tvGeminiOutput.text = "✅ عرضت كل النتائج (${results.size})"
             }
 
-            // "احذف الميتين"
-            listOf("احذف", "حذف", "امسح", "نحي", "remove").any { text.contains(it) } &&
-                    listOf("ميت", "dead", "offline", "فاشل").any { text.contains(it) } -> {
-                val before = results.size
-                results.removeAll { !it.online }
-                llResultsContainer.removeAllViews()
-                results.forEachIndexed { i, r -> addResultCard(r, i) }
-                tvGeminiOutput.text = "🗑️ تم حذف ${before - results.size} رابط ميت من القائمة\nتبقى ${results.size} رابط شغال"
-            }
-
-            // "ملخص" / "إحصائيات"
-            listOf("ملخص", "إحصاء", "إحصائيات", "stats", "summary", "rapport").any { text.contains(it) } -> {
-                autoGeminiSummary()
-            }
-
-            // "وريني قريبي الانتهاء"
-            listOf("قريب", "ينتهي", "expire", "تنتهي", "قريبة").any { text.contains(it) } -> {
-                val expiringSoon = results.filter { r ->
-                    r.online && r.expiry.isNotBlank() && isExpiringSoon(r.expiry)
-                }
-                if (expiringSoon.isEmpty()) {
-                    tvGeminiOutput.text = "✅ لا يوجد رابط قريب من الانتهاء (خلال 7 أيام)"
-                } else {
-                    llResultsContainer.removeAllViews()
-                    expiringSoon.forEachIndexed { i, r -> addResultCard(r, i) }
-                    tvGeminiOutput.text = "⚠️ ${expiringSoon.size} رابط ينتهي خلال 7 أيام!"
-                }
-            }
-
-            // "ساعدني" / "الأوامر"
-            listOf("ساعد", "help", "aide", "أوامر", "واش").any { text.contains(it) } -> {
+            // ══════════════════════════════════════════════
+            // 14) مساعدة / الأوامر
+            // ══════════════════════════════════════════════
+            listOf("ساعد", "help", "aide", "أوامر", "واش", "شنو").any { text.contains(it) } -> {
                 tvGeminiOutput.text = """
-🧠 أوامر Gemini المتاحة:
+🧠 أوامر Gemini — بالدارجة الجزائرية:
 
+🔍 فحص وعرض:
+• "سير تيسريهم قاع" — فحص كل الروابط
 • "وريني الشغالين فقط"
-• "وريني الميتين"  
-• "رتب حسب القنوات"
-• "عمّم أحسن رابط"
+• "وريني الميتين / المتبلوكين"
 • "وريني الكل"
-• "احذف الميتين"
-• "ملخص / إحصائيات"
-• "وريني قريبي الانتهاء"
+
+🗂️ ترتيب وتصفية:
+• "افرزلي على حساب القنوات"
+• "افرزلي على حساب البورت"
+• "افرزلي على حساب السرعة"
+• "كاين رابط مكرر؟" — ينظف المكررات
+
+📋 استخراج بيانات:
+• "جبدلي اليوزر والباص"
+• "خرجلي برك الهوست"
+• "قلب هذا الرابط لـ Xtream"
+
+⏳ الصلاحية:
+• "شكون اللي يموتوا هذا الشهر؟"
+• "شكون اللي يموتوا هذا الأسبوع؟"
+
+🚀 إجراءات سريعة:
+• "امشي دير هذا هو السيرفر الرئيسي"
+• "طيرلي قاع الروابط الميتة"
+• "أعطيني الخلاص الكاملا"
                 """.trimIndent()
             }
 
             else -> {
-                tvGeminiOutput.text = "🤔 ما فهمتش الأمر.\n\nجرب:\n• وريني الشغالين فقط\n• رتب حسب القنوات\n• عمّم أحسن رابط\n• ساعدني (لعرض كل الأوامر)"
+                tvGeminiOutput.text = "🤔 ما فهمتش الأمر.\n\nقول مثلاً:\n• وريني الشغالين فقط\n• افرزلي على حساب القنوات\n• امشي دير هذا هو السيرفر الرئيسي\n• ساعدني — لعرض كل الأوامر"
             }
         }
 
         etGeminiCmd.setText("")
+    }
+
+    // استخراج البورت من الرابط
+    private fun extractPort(url: String): Int {
+        return try {
+            val uri = java.net.URI(url)
+            if (uri.port > 0) uri.port else 80
+        } catch (_: Exception) { 80 }
+    }
+
+    // فحص الانتهاء خلال X أيام
+    private fun isExpiringInDays(expiry: String, days: Int): Boolean {
+        return try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            val date = sdf.parse(expiry.take(10)) ?: return false
+            val diffDays = ((date.time - System.currentTimeMillis()) / 86_400_000L)
+            diffDays in 0..days
+        } catch (_: Exception) { false }
     }
 
     private fun isExpiringSoon(expiry: String): Boolean {
