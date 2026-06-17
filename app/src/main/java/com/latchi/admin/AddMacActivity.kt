@@ -21,6 +21,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -285,7 +288,7 @@ class AddMacActivity : AppCompatActivity() {
     }
 
     private fun submitMac() {
-        val portal = portalInput.text.toString().trim()
+        val portal = portalInput.text.toString().trim().trimEnd('/')
         val mac = macInput.text.toString().trim().uppercase()
         val name = nameInput.text.toString().trim()
         val code = codeInput.text.toString().trim().ifBlank { (100000..999999).random().toString() }
@@ -295,22 +298,40 @@ class AddMacActivity : AppCompatActivity() {
             return
         }
 
+        // ✅ الإصلاح الجذري:
+        // نبني رابط mac:// ونرسله كـ playlist_url عادي
+        // هذا يضمن أن Google Script يحفظه ويرجعه للتطبيق بشكل صحيح
+        // وأن ActivationConfig.extractPlaylistUrl() يفككه ويبني mac:// من source_type=mac
+        // الطريقتان تعملان — نرسل الاثنتين لضمان التوافق
+        val macSchemeUrl = "mac://stalker?portal=${URLEncoder.encode(portal, "UTF-8")}&mac=${URLEncoder.encode(mac, "UTF-8")}"
+
         showProgress("جارِ إضافة MAC...")
         statusText.text = "⏳ جاري إضافة MAC: $mac..."
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val apiUrl = getSharedPreferences("admin_prefs", Context.MODE_PRIVATE).getString("apiUrl", GOOGLE_SCRIPT) ?: GOOGLE_SCRIPT
+                val apiUrl = getSharedPreferences("admin_prefs", Context.MODE_PRIVATE)
+                    .getString("apiUrl", GOOGLE_SCRIPT) ?: GOOGLE_SCRIPT
+
+                val ts = System.currentTimeMillis()
                 val url = buildString {
                     append(apiUrl)
                     append("?action=add_code")
                     append("&secret=").append(enc(SECRET))
                     append("&code=").append(enc(code))
                     append("&name=").append(enc(name))
+                    // نرسل source_type + portal + mac (لـ Script المحدّث)
                     append("&source_type=mac")
                     append("&portal_url=").append(enc(portal))
                     append("&mac_address=").append(enc(mac))
+                    // + playlist_url كـ mac:// (للتوافق مع Script القديم)
+                    append("&playlist_url=").append(enc(macSchemeUrl))
+                    // expires_at افتراضي سنة كاملة
+                    append("&expires_at=").append(enc(getOneYearFromNow()))
+                    append("&max_devices=1")
+                    append("&_t=$ts")
                 }
+
                 val req = Request.Builder().url(url).get().build()
                 client.newCall(req).execute().use { res ->
                     val txt = res.body?.string().orEmpty()
@@ -346,6 +367,12 @@ class AddMacActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun getOneYearFromNow(): String {
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.YEAR, 1)
+        return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(cal.time)
     }
 
     private fun showProgress(msg: String) {
