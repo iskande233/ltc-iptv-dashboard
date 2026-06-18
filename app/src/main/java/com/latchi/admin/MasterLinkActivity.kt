@@ -44,6 +44,7 @@ class MasterLinkActivity : AppCompatActivity() {
     private lateinit var txtLog: TextView
     private lateinit var progressOverlay: View
     private lateinit var progressStatus: TextView
+    private lateinit var txtMasterInfoCard: TextView
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguageManager.wrap(newBase))
@@ -138,28 +139,20 @@ class MasterLinkActivity : AppCompatActivity() {
             if (url.isBlank()) {
                 VipUiHelper.showErrorOverlay(this, "ألصق الرابط أولاً لاختباره.")
             } else {
-                showProgress("جاري فحص استجابة السيرفر...")
+                showProgress("جاري فحص استجابة السيرفر وتاريخ الانتهاء...")
                 CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val req = okhttp3.Request.Builder().url(url).get().build()
-                        OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build().newCall(req).execute().use { res ->
-                            val code = res.code
-                            withContext(Dispatchers.Main) {
-                                hideProgress()
-                                if (res.isSuccessful) {
-                                    appendLog("✅ السيرفر شغال ومستقر (HTTP $code)")
-                                    VipUiHelper.showSuccessOverlay(this@MasterLinkActivity, "✅ السيرفر شغال", "السيرفر أونلاين ومستقر (HTTP $code).\nيمكنك تعميمه الآن بأمان ✓", "حسناً", {})
-                                } else {
-                                    appendLog("❌ السيرفر لا يستجيب بالشكل الصحيح (HTTP $code)")
-                                    VipUiHelper.showWarningOverlay(this@MasterLinkActivity, "⚠️ السيرفر يعطي خطأ", "السيرفر أرجع الخطأ (HTTP $code). تأكد من الرابط.", "حسناً", {})
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            hideProgress()
-                            appendLog("❌ السيرفر معطوب أو لا يستجيب: ${e.localizedMessage}")
-                            VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ السيرفر لا يستجيب:\n${e.localizedMessage}")
+                    val info = XtreamMasterInfoHelper.fetchInfo(url)
+                    withContext(Dispatchers.Main) {
+                        hideProgress()
+                        if (info.success) {
+                            val details = "🟢 الحالة: ${info.status}\n📅 تاريخ الانتهاء الحقيقي: ${info.expiryDate} (يتبقى ${info.daysLeft} يوم)\n📱 الحد الأقصى للأجهزة: ${info.maxConnections}\n⚡ المتصلون الآن: ${info.activeConnections}"
+                            txtMasterInfoCard.text = details
+                            appendLog("✅ تم جلب معلومات السيرفر الحقيقية: ينتهي في ${info.expiryDate}")
+                            VipUiHelper.showSuccessOverlay(this@MasterLinkActivity, "✅ السيرفر شغال ومستقر", details, "حسناً", {})
+                        } else {
+                            txtMasterInfoCard.text = "❌ فشل جلب تفاصيل الحساب: ${info.expiryDate}"
+                            appendLog("❌ فشل استخراج تاريخ الانتهاء")
+                            VipUiHelper.showWarningOverlay(this@MasterLinkActivity, "⚠️ السيرفر يعطي خطأ", "لم نتمكن من جلب user_info. قد يكون الرابط M3U عادي وليس Xtream.", "حسناً", {})
                         }
                     }
                 }
@@ -210,6 +203,27 @@ class MasterLinkActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
         content.addView(expContainer, cardLp())
+
+        // ===== Master True Master Expiry Info Card =====
+        val infoContainer = VipUiHelper.buildCard(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            addView(TextView(this@MasterLinkActivity).apply {
+                text = "📊 تفاصيل السيرفر الموحد الحقيقية (الذاكرة الاصطناعية)"
+                setTextColor(Color.parseColor("#7FE6FF"))
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            })
+            txtMasterInfoCard = TextView(this@MasterLinkActivity).apply {
+                text = "ألصق الرابط واضغط '🔎 اختبار' لجلب تاريخ الانتهاء الحقيقي والأجهزة المتصلة."
+                setTextColor(Color.parseColor("#B8C0E0"))
+                textSize = 12f
+                setLineSpacing(5f, 1.1f)
+                setPadding(0, dp(8), 0, 0)
+            }
+            addView(txtMasterInfoCard)
+        }
+        content.addView(infoContainer, cardLp())
 
         // ===== Submit buttons (broadcast) =====
         val btnRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }

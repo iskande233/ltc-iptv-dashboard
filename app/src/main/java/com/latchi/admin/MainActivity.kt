@@ -161,6 +161,11 @@ class MainActivity : AppCompatActivity() {
         }
         content.addView(geminiCard, cardLp().apply { bottomMargin = dp(12) })
 
+        val masterExpiryInfoCard = vipActionCard("📅", "تاريخ انتهاء السيرفر الحقيقي", "فحص ومعرفة تاريخ نهاية الصلاحية الحقيقي والأجهزة المتصلة ⚡", VipUiHelper.BtnVariant.NEON_BLUE) {
+            startActivity(Intent(this, MasterLinkActivity::class.java))
+        }
+        content.addView(masterExpiryInfoCard, cardLp().apply { bottomMargin = dp(12) })
+
         val xtreamTesterCard = vipActionCard("🔍", "فاحص الأكواد الذكي", "Xtream & M3U Tester • فحص 100 رابط دفعة واحدة", VipUiHelper.BtnVariant.NEON_GREEN) {
             startActivity(Intent(this, XtreamTesterActivity::class.java))
         }
