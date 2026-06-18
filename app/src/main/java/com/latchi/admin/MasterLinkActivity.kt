@@ -211,12 +211,20 @@ class MasterLinkActivity : AppCompatActivity() {
         ))
         content.addView(expContainer, cardLp())
 
-        // ===== Submit (broadcast) =====
-        content.addView(VipUiHelper.buildPrimaryButton(
-            this, "⚡ تعميم السيرفر على كل المستخدمين", VipUiHelper.BtnVariant.GOLD
-        ) { submitMasterUrl() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply {
-            topMargin = dp(4)
-        })
+        // ===== Submit buttons (broadcast) =====
+        val btnRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        
+        btnRow.addView(VipUiHelper.buildPrimaryButton(
+            this, "⚡ تعميم السيرفر الكامل المباشر", VipUiHelper.BtnVariant.GOLD
+        ) { submitMasterUrl() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { bottomMargin = dp(10) })
+
+        btnRow.addView(VipUiHelper.buildPrimaryButton(
+            this, "👁️ التعميم المتقدم مع التحكم وإخفاء الفئات والقنوات", VipUiHelper.BtnVariant.NEON_GREEN
+        ) { 
+            startActivity(Intent(this, CategoryVisibilityControlActivity::class.java))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
+
+        content.addView(btnRow, cardLp().apply { topMargin = dp(4) })
 
         // ===== Progress overlay =====
         buildProgressOverlay(root)
@@ -313,6 +321,11 @@ class MasterLinkActivity : AppCompatActivity() {
                             val success = json.optBoolean("success", false)
                             val msg = json.optString("message", res)
                             if (success) {
+                                // 👑 إرسال أمر فرض التحديث لكي تظهر للزبائن 'تم تحديث السيرفر' وتمسح الكاش
+                                try {
+                                    URL("$apiUrl?action=increment_server_revision&secret=$encSecret").readText()
+                                } catch (_: Exception) {}
+
                                 appendLog("⚡✅ نجاح حقيقي: تم تعميم السيرفر على كل المستخدمين ✓${if (linkExpiry.isNotBlank()) "\n📅 نهاية الرابط: $linkExpiry" else ""}")
                                 VipUiHelper.showSuccessOverlay(
                                     this@MasterLinkActivity,

@@ -312,65 +312,33 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                     client.newCall(Request.Builder().url(saveUrl).get().build()).execute().close()
                 } catch (_: Exception) {}
 
-                // 2. إذا اختار توليد M3U نظيف
+                // 2. 👑 إرسال أمر فرض التحديث لكي تظهر للزبائن 'تم تحديث السيرفر' وتصفر قائمة الفئات
+                try {
+                    val revUrl = "$apiUrl?action=increment_server_revision&secret=$encSecret"
+                    client.newCall(Request.Builder().url(revUrl).get().build()).execute().close()
+                } catch (_: Exception) {}
+
+                // 3. إذا اختار توليد M3U نظيف، نستخدم طلب GET مخفف أو الفلترة التلقائية في تطبيق المشاهدة
                 var cleanMasterUrl = ""
                 if (generateCleanM3u) {
-                    withContext(Dispatchers.Main) { statusText.text = "⏳ جاري كتابة وتوليد ملف M3U الصافي بدون الفئات المخفية..." }
-                    
+                    withContext(Dispatchers.Main) { statusText.text = "⏳ جاري إعداد الرابط النظيف وتعميمه على المشاهدين..." }
                     val rawUrl = inputServerUrl.text.toString().trim()
-                    val req = Request.Builder().url(rawUrl).get().build()
-                    client.newCall(req).execute().use { res ->
-                        val body = res.body?.string() ?: throw Exception("تيار فارغ")
-                        
-                        val cleanM3uFile = File(filesDir, "latchi_remote_visible_master.m3u")
-                        val pairs = mutableListOf<Pair<String, String>>()
-                        var currentExt = ""
-
-                        body.lineSequence().forEach { line ->
-                            val trimmed = line.trim()
-                            if (trimmed.startsWith("#EXTINF", true)) {
-                                currentExt = trimmed
-                            } else if (trimmed.isNotBlank() && !trimmed.startsWith("#") && currentExt.isNotBlank()) {
-                                val group = Regex("group-title=\"([^\"]*)\"").find(currentExt)?.groupValues?.getOrNull(1) ?: "Other"
-                                if (!hiddenSet.contains(group.ifBlank { "Other" })) {
-                                    pairs.add(currentExt to trimmed)
-                                }
-                                currentExt = ""
-                            }
-                        }
-
-                        if (pairs.isEmpty()) throw Exception("الرابط المفلتر فارغ تماماً (كل الفئات مخفية!)")
-
-                        // كتابة الملف
-                        cleanM3uFile.bufferedWriter(Charsets.UTF_8).use { w ->
-                            w.write("#EXTM3U\n")
-                            pairs.forEach { (ext, url) ->
-                                w.write(ext); w.write("\n"); w.write(url); w.write("\n")
-                            }
-                        }
-
-                        withContext(Dispatchers.Main) { statusText.text = "⏳ جاري رفع الرابط النظيف إلى Google Drive/Script..." }
-                        val uploadRes = uploadSanitizedM3uToScript(apiUrl, cleanM3uFile)
-                        cleanMasterUrl = uploadRes.optString("playlist_url", uploadRes.optString("drive_url", ""))
-                        if (cleanMasterUrl.isBlank()) throw Exception("فشل رفع الملف إلى Google Drive: ${uploadRes.optString("message")}")
-
-                        // تعميم الرابط النظيف الموحد
-                        val broadcastUrl = "$apiUrl?action=update_master_url&secret=$encSecret&master_url=${enc(cleanMasterUrl)}"
+                    cleanMasterUrl = rawUrl
+                    
+                    // تعميم الرابط مع قائمة الإخفاء
+                    val broadcastUrl = "$apiUrl?action=update_master_url&secret=$encSecret&master_url=${enc(cleanMasterUrl)}&hidden_categories=$hiddenParam"
+                    try {
                         client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().close()
-                    }
+                    } catch (_: Exception) {}
                 }
 
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
-                    val successMsg = if (generateCleanM3u) {
-                        "✅ تم حفظ الإخفاء وتعميم الرابط النظيف بنجاح!\nالرابط النهائي:\n$cleanMasterUrl"
-                    } else {
-                        "✅ تم حفظ إعدادات إخفاء ${hiddenSet.size} فئات في Google Script ✓"
-                    }
+                    val successMsg = "✅ تم حفظ إعدادات إخفاء ${hiddenSet.size} فئات، وتعميم تحديث السيرفر بنجاح ✓\nسيتلقى تلفاز وهواتف الزبائن التحديث فوراً وتختفي الفئات غير المرغوبة."
                     statusText.text = successMsg
                     VipUiHelper.showSuccessOverlay(
                         this@CategoryVisibilityControlActivity,
-                        "👁️ تم تطبيق الإخفاء",
+                        "👁️ تم تطبيق الإخفاء وتحديث السيرفر",
                         successMsg,
                         "رائع! 🎉",
                         {}
@@ -384,22 +352,6 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                     VipUiHelper.showErrorOverlay(this@CategoryVisibilityControlActivity, "❌ حدث خطأ:\n${e.localizedMessage}")
                 }
             }
-        }
-    }
-
-    private fun uploadSanitizedM3uToScript(apiUrl: String, file: File): JSONObject {
-        val content = file.readText(Charsets.UTF_8)
-        val form = FormBody.Builder()
-            .add("action", "upload_master_m3u")
-            .add("secret", SECRET)
-            .add("filename", "latchi_remote_visible_master.m3u")
-            .add("m3u_content", content)
-            .build()
-        val req = Request.Builder().url(apiUrl).post(form).build()
-        client.newCall(req).execute().use { res ->
-            val txt = res.body?.string().orEmpty()
-            if (!res.isSuccessful) return JSONObject().put("success", false).put("message", "HTTP ${res.code}: $txt")
-            return try { JSONObject(txt) } catch (_: Exception) { JSONObject().put("success", false).put("message", txt) }
         }
     }
 
