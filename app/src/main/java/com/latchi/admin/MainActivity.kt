@@ -31,11 +31,10 @@ import java.util.concurrent.TimeUnit
  * Dashboard رئيسي لـ LATCHI IPTV Admin — النسخة VIP.
  *
  * الإصلاحات الجذرية:
- * 1. كل زر يفتح Activity مستقلة (Sanitizer, AddUser, MasterLink, AddMac, CodemagicCenter).
- *    لم يعد هناك زر يفتح نفس الصفحة.
- * 2. واجهة VIP Dark Theme بتدرج Royal Blue → Midnight Blue مع حدود نيون.
- * 3. بطاقات Stat Cards في الأعلى تعرض حالة السيرفر، رقم الإصدار، تاريخ آخر تحديث.
- * 4. أزرار تحميل APK ونشر الرابط مرتبة جنباً لجنب بمسافات آمنة.
+ * 1. تمت إضافة شاشات الذكاء الاصطناعي البارزة (Gemini AI Assistant و Xtream Tester).
+ * 2. كل زر يفتح Activity مستقلة لضمان أقصى درجات الاستقرار.
+ * 3. واجهة VIP Dark Theme بتدرج Royal Blue → Midnight Blue مع حدود نيون.
+ * 4. بطاقات Stat Cards في الأعلى تعرض حالة السيرفر، رقم الإصدار، تاريخ آخر تحديث.
  * 5. كل المحتوى داخل ScrollView لاستجابة كاملة على جميع أحجام الهواتف.
  */
 class MainActivity : AppCompatActivity() {
@@ -44,9 +43,8 @@ class MainActivity : AppCompatActivity() {
         private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec"
         private const val ADMIN_SECRET = "LatchiAdmin2026"
         private const val DEFAULT_CODEMAGIC_TOKEN = "9OVMA35F09K3nv1djPFqSnQIQCKkq_b4_twyExdllp4"
-        private const val APP_VERSION = "1.0.0 VIP"
-        private const val APP_VERSION_CODE = "1"
-        private const val LAST_UPDATE_DATE = "2026-06-15"
+        private const val APP_VERSION = "2.1.0 VIP"
+        private const val APP_VERSION_CODE = "3"
     }
 
     private val prefs by lazy { getSharedPreferences("admin_prefs", MODE_PRIVATE) }
@@ -67,7 +65,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         VipUiHelper.applyWindowBackground(this)
 
-        // Seed defaults once.
         if (prefs.getString("codemagic_token", "").isNullOrBlank()) {
             prefs.edit().putString("codemagic_token", DEFAULT_CODEMAGIC_TOKEN).apply()
         }
@@ -89,10 +86,9 @@ class MainActivity : AppCompatActivity() {
             subtitle = "Royal Admin Control Center • VIP",
             onBack = { /* لا يوجد رجوع - هي الشاشة الرئيسية */ }
         ).apply {
-            // تعديل TopBar ليعرض الشعار بدل زر الرجوع
             val back = getChildAt(0) as TextView
             back.text = "👑"
-            back.setOnClickListener { /* لا شيء - الرئيسية */ }
+            back.setOnClickListener { /* لا شيء */ }
             back.setTextColor(Color.parseColor("#FFD700"))
         })
 
@@ -107,13 +103,12 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT
         ))
 
-        // ===== Stat Cards (3 بطاقات جنباً لجنب) =====
+        // ===== Stat Cards (3 بطاقات) =====
         content.addView(buildStatRow())
 
         // ===== Section title: النشر =====
         content.addView(sectionTitle("🚀 النشر والتحديث"))
 
-        // ===== زرّان جنباً لجنب: تحميل APK + نشر =====
         val publishRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 0, 0, dp(12))
@@ -143,7 +138,6 @@ class MainActivity : AppCompatActivity() {
             dp(58)
         ).apply { bottomMargin = dp(12) })
 
-        // ===== حالة النشر =====
         statusText = TextView(this).apply {
             text = "⏳ جاري فحص آخر تحديث..."
             setTextColor(Color.parseColor("#B8C0E0"))
@@ -154,12 +148,29 @@ class MainActivity : AppCompatActivity() {
         content.addView(statusText, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(8) })
+        ).apply { bottomMargin = dp(12) })
+
+
+        // ===== Section title: ✦ الذكاء الاصطناعي وفحص الروابط =====
+        content.addView(sectionTitle("✦ الذكاء الاصطناعي وفحص الروابط"))
+
+        // بطاقة المساعد الذكي Gemini AI
+        val geminiCard = vipActionCard("✦", "المساعد الذكي Gemini AI", "أوامر صوتية بالدارجة 🇩🇿 • إدارة التطبيق بالكامل", VipUiHelper.BtnVariant.GOLD) {
+            startActivity(Intent(this, GeminiAssistantActivity::class.java))
+        }
+        content.addView(geminiCard, cardLp().apply { bottomMargin = dp(12) })
+
+        // بطاقة فاحص الأكواد الذكي
+        val xtreamTesterCard = vipActionCard("🔍", "فاحص الأكواد الذكي", "Xtream & M3U Tester • فحص 100 رابط دفعة واحدة", VipUiHelper.BtnVariant.NEON_GREEN) {
+            startActivity(Intent(this, XtreamTesterActivity::class.java))
+        }
+        content.addView(xtreamTesterCard, cardLp().apply { bottomMargin = dp(16) })
+
 
         // ===== Section title: الأدوات الإدارية =====
         content.addView(sectionTitle("🛠️ الأدوات الإدارية"))
 
-        // ===== Row 1: الغربال | كود ماجيك =====
+        // Row 1: الغربال | كود ماجيك
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row1.addView(vipActionCard("🧹", "واجهة الغربال", "تصفية M3U + AI",
             VipUiHelper.BtnVariant.NEON_BLUE) {
@@ -172,7 +183,7 @@ class MainActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, dp(150), 1f).apply { marginStart = dp(8) })
         content.addView(row1, cardLp().apply { bottomMargin = dp(12) })
 
-        // ===== Row 2: إضافة مستخدم | تعميم الرابط =====
+        // Row 2: إضافة مستخدم | تعميم الرابط
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row2.addView(vipActionCard("👤", "إضافة مستخدم", "توليد كود",
             VipUiHelper.BtnVariant.GOLD) {
@@ -185,19 +196,19 @@ class MainActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, dp(150), 1f).apply { marginStart = dp(8) })
         content.addView(row2, cardLp().apply { bottomMargin = dp(12) })
 
-        // ===== Row 3: إدارة المستخدمين =====
+        // Row 3: إدارة المستخدمين والسيرفرات
         content.addView(vipActionCard("👥", "إدارة المستخدمين والسيرفرات", "Users + Servers Manager",
             VipUiHelper.BtnVariant.NEON_BLUE) {
             startActivity(Intent(this, ServerListActivity::class.java))
         }, cardLp().apply { bottomMargin = dp(12) })
 
-        // ===== Row 4: إضافة MAC =====
+        // Row 4: إضافة MAC
         content.addView(vipActionCard("📟", "إضافة MAC / Stalker", "Portal + MAC Address",
             VipUiHelper.BtnVariant.NEON_PURPLE) {
             startActivity(Intent(this, AddMacActivity::class.java))
         }, cardLp().apply { bottomMargin = dp(20) })
 
-        // ===== Footer =====
+        // Footer
         content.addView(TextView(this).apply {
             text = "LATCHI IPTV Dashboard v$APP_VERSION\n© 2026 — VIP Edition"
             setTextColor(Color.parseColor("#7A82A8"))
@@ -214,7 +225,6 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(16))
         }
 
-        // Stat 1: حالة السيرفر
         val serverCard = VipUiHelper.buildCard(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -238,7 +248,6 @@ class MainActivity : AppCompatActivity() {
         serverCard.addView(serverStatusCard)
         row.addView(serverCard, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
 
-        // Stat 2: رقم الإصدار
         val versionCard = VipUiHelper.buildCard(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -261,7 +270,6 @@ class MainActivity : AppCompatActivity() {
         })
         row.addView(versionCard, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6); marginEnd = dp(6) })
 
-        // Stat 3: آخر تحديث
         val updateCard = VipUiHelper.buildCard(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -358,7 +366,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // عرض آخر نشر من prefs
         val lastPub = prefs.getString("published_build_id", "").orEmpty()
         val lastVer = prefs.getString("last_success_version", "").orEmpty()
         val lastUpdatedAt = prefs.getString("last_publish_time", "").orEmpty()
@@ -370,7 +377,6 @@ class MainActivity : AppCompatActivity() {
             lastPublishCard?.text = "لا يوجد\nنشر بعد"
         }
     }
-
 
     private fun showExternalApkPublishDialog() {
         val container = LinearLayout(this).apply {
