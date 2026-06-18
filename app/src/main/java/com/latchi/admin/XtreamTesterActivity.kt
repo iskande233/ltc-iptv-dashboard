@@ -457,7 +457,7 @@ class XtreamTesterActivity : AppCompatActivity() {
                 return TestResult(url, false, error = "HTTP $code")
             }
 
-            val body = conn.inputStream.bufferedReader().readText(Charsets.UTF_8)
+            val body = conn.inputStream.bufferedReader().readText()
             if (!body.contains("#EXTINF", ignoreCase = true)) {
                 return TestResult(url, false, error = "ليس M3U صالح")
             }
