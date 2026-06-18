@@ -229,7 +229,11 @@ class GeminiAssistantActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(dp(24), dp(18), dp(24), dp(18))
         }
-        innerGlow.addView(TextView(this).apply { text = "🎙️"; textSize = 38f; marginEnd = dp(14) })
+        innerGlow.addView(TextView(this).apply {
+            text = "🎙️"
+            textSize = 38f
+            setPadding(0, 0, dp(14), 0)
+        })
         tvVoiceStatus = TextView(this).apply {
             text = "اسمعك... تكلم بالدارجة"
             setTextColor(Color.parseColor("#00E5FF"))
