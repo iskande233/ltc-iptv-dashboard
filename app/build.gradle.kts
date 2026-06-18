@@ -17,9 +17,14 @@ android {
 
     signingConfigs {
         create("debug_signed") {
-            storeFile = file("${rootProject.projectDir}/../latchi.jks")
+            // البحث عن ملف المفتاح في جذر المشروع أولاً، ثم المجلد الأب (للتوافق)
+            val jksFile = file("${rootProject.projectDir}/latchi.jks")
+                .takeIf { it.exists() }
+                ?: file("${rootProject.projectDir}/../latchi.jks")
                 .takeIf { it.exists() }
                 ?: file("${System.getProperty("user.home")}/.android/debug.keystore")
+
+            storeFile = jksFile
             storePassword = "latchi2026"
             keyAlias = "latchi"
             keyPassword = "latchi2026"
