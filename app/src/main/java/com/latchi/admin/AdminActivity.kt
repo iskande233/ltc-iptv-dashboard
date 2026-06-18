@@ -196,7 +196,20 @@ class AdminActivity : AppCompatActivity() {
             saveApiUrl()
             startActivity(Intent(this, ServerListActivity::class.java))
         }
-        btnGeminiChat.setOnClickListener { showGeminiAssistantDialog() }
+        btnGeminiChat.setOnClickListener {
+            // إذا ما فيش مفتاح → يفتح إعداد المفتاح أولاً
+            if (GeminiKeyManager.hasKey(this)) {
+                showGeminiAssistantDialog()
+            } else {
+                showGeminiKeySetupDialog()
+            }
+        }
+
+        // زر إعداد مفتاح Gemini (Long Click على زر Gemini)
+        btnGeminiChat.setOnLongClickListener {
+            showGeminiKeySetupDialog()
+            true
+        }
 
         // ✅ زر فاحص الأكواد الذكي
         findViewById<TextView?>(R.id.btnXtreamTester)?.setOnClickListener {
@@ -798,6 +811,97 @@ class AdminActivity : AppCompatActivity() {
         dialog.setOnShowListener { container.alpha = 0f; container.animate().alpha(1f).setDuration(220).start() }
         dialog.show()
     }
+
+    // ─── شاشة إعداد مفتاح Gemini ───────────────────────────────────
+    private fun showGeminiKeySetupDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(20), dp(24), dp(20))
+            setBackgroundResource(R.drawable.bg_success_dialog)
+        }
+
+        container.addView(TextView(this).apply {
+            text = "🔑 إعداد مفتاح Gemini API"
+            setTextColor(Color.parseColor("#FFD700"))
+            textSize = 18f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 0, 0, dp(12))
+        })
+
+        container.addView(TextView(this).apply {
+            text = "المفتاح يُحفظ على جهازك فقط\nما يظهر في الكود أبداً ✅"
+            setTextColor(Color.parseColor("#B8C0E0"))
+            textSize = 12f
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 0, 0, dp(16))
+        })
+
+        // المفتاح الأول
+        val etKey1 = EditText(this).apply {
+            hint = "🔑 المفتاح الأول (الرئيسي)"
+            setHintTextColor(Color.parseColor("#7A82A8"))
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#121228"))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            isSingleLine = true
+            // إظهار المفتاح الحالي إذا موجود
+            setText(GeminiKeyManager.getKey1(this@AdminActivity))
+        }
+        container.addView(etKey1, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(50)
+        ).apply { bottomMargin = dp(10) })
+
+        // المفتاح الثاني
+        val etKey2 = EditText(this).apply {
+            hint = "🔑 المفتاح الثاني (احتياطي - اختياري)"
+            setHintTextColor(Color.parseColor("#7A82A8"))
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#121228"))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            isSingleLine = true
+            setText(GeminiKeyManager.getKey2(this@AdminActivity))
+        }
+        container.addView(etKey2, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(50)
+        ).apply { bottomMargin = dp(16) })
+
+        // زر حفظ
+        val btnSave = TextView(this).apply {
+            text = "💾 حفظ المفاتيح"
+            setTextColor(Color.BLACK)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setBackgroundResource(R.drawable.bg_btn_gold)
+            gravity = android.view.Gravity.CENTER
+            textSize = 15f
+        }
+        container.addView(btnSave, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(52)
+        ))
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(container)
+            .setNegativeButton("إغلاق", null)
+            .create()
+
+        btnSave.setOnClickListener {
+            val k1 = etKey1.text.toString().trim()
+            val k2 = etKey2.text.toString().trim()
+            if (k1.isBlank()) {
+                Toast.makeText(this, "❌ أدخل المفتاح الأول على الأقل", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            GeminiKeyManager.saveKeys(this, k1, k2)
+            dialog.dismiss()
+            Toast.makeText(this, "✅ تم حفظ مفاتيح Gemini بأمان", Toast.LENGTH_SHORT).show()
+            // افتح Gemini مباشرة بعد الحفظ
+            showGeminiAssistantDialog()
+        }
+
+        dialog.show()
+    }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun showGeminiAssistantDialog() {
         val container = LinearLayout(this).apply {
