@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbycNO9V5P4jbHQFNDZeQM0FJwqhSlCJMxXV3mCzqrJXM3hYG9JCtUk0tow6bm6Ijsv8/exec"
+        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec"
         private const val ADMIN_SECRET = "LatchiAdmin2026"
         private const val DEFAULT_CODEMAGIC_TOKEN = "9OVMA35F09K3nv1djPFqSnQIQCKkq_b4_twyExdllp4"
         private const val APP_VERSION = "1.0.0 VIP"

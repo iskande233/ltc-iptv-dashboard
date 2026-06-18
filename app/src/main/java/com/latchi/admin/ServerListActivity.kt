@@ -86,7 +86,7 @@ class ServerListActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val apiUrl = "https://script.google.com/macros/s/AKfycbycNO9V5P4jbHQFNDZeQM0FJwqhSlCJMxXV3mCzqrJXM3hYG9JCtUk0tow6bm6Ijsv8/exec"
+                val apiUrl = "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec"
                 val encSecret = URLEncoder.encode("LatchiAdmin2026", "UTF-8")
                 val getUrl = "$apiUrl?action=get_all_users&secret=$encSecret"
 
