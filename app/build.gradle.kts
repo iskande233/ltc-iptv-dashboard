@@ -15,7 +15,25 @@ android {
         versionName = "2.1.0 VIP"
     }
 
+    signingConfigs {
+        create("debug_signed") {
+            storeFile = file("${rootProject.projectDir}/../latchi.jks")
+                .takeIf { it.exists() }
+                ?: file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = "latchi2026"
+            keyAlias = "latchi"
+            keyPassword = "latchi2026"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
     buildTypes {
+        getByName("debug") {
+            try {
+                signingConfig = signingConfigs.getByName("debug_signed")
+            } catch (_: Exception) {}
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
