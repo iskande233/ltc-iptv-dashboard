@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
@@ -31,11 +32,12 @@ import java.util.concurrent.TimeUnit
  * Dashboard رئيسي لـ LATCHI IPTV Admin — النسخة VIP.
  *
  * الإصلاحات الجذرية:
- * 1. تمت إضافة شاشات الذكاء الاصطناعي البارزة (Gemini AI Assistant و Xtream Tester).
- * 2. كل زر يفتح Activity مستقلة لضمان أقصى درجات الاستقرار.
- * 3. واجهة VIP Dark Theme بتدرج Royal Blue → Midnight Blue مع حدود نيون.
- * 4. بطاقات Stat Cards في الأعلى تعرض حالة السيرفر، رقم الإصدار، تاريخ آخر تحديث.
- * 5. كل المحتوى داخل ScrollView لاستجابة كاملة على جميع أحجام الهواتف.
+ * 1. تمت إضافة زر "🗑️ تنظيف جميع المستخدمين" لمسح قاعدة بيانات Google Sheet بضغطة زر.
+ * 2. تمت إضافة شاشات الذكاء الاصطناعي البارزة (Gemini AI Assistant و Xtream Tester).
+ * 3. كل زر يفتح Activity مستقلة لضمان أقصى درجات الاستقرار.
+ * 4. واجهة VIP Dark Theme بتدرج Royal Blue → Midnight Blue مع حدود نيون.
+ * 5. بطاقات Stat Cards في الأعلى تعرض حالة السيرفر، رقم الإصدار، تاريخ آخر تحديث.
+ * 6. كل المحتوى داخل ScrollView لاستجابة كاملة على جميع أحجام الهواتف.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -50,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("admin_prefs", MODE_PRIVATE) }
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     private var statusText: TextView? = null
@@ -84,7 +86,7 @@ class MainActivity : AppCompatActivity() {
             this,
             title = "LATCHI IPTV Dashboard",
             subtitle = "Royal Admin Control Center • VIP",
-            onBack = { /* لا يوجد رجوع - هي الشاشة الرئيسية */ }
+            onBack = { /* لا يوجد رجوع */ }
         ).apply {
             val back = getChildAt(0) as TextView
             back.text = "👑"
@@ -154,13 +156,11 @@ class MainActivity : AppCompatActivity() {
         // ===== Section title: ✦ الذكاء الاصطناعي وفحص الروابط =====
         content.addView(sectionTitle("✦ الذكاء الاصطناعي وفحص الروابط"))
 
-        // بطاقة المساعد الذكي Gemini AI
         val geminiCard = vipActionCard("✦", "المساعد الذكي Gemini AI", "أوامر صوتية بالدارجة 🇩🇿 • إدارة التطبيق بالكامل", VipUiHelper.BtnVariant.GOLD) {
             startActivity(Intent(this, GeminiAssistantActivity::class.java))
         }
         content.addView(geminiCard, cardLp().apply { bottomMargin = dp(12) })
 
-        // بطاقة فاحص الأكواد الذكي
         val xtreamTesterCard = vipActionCard("🔍", "فاحص الأكواد الذكي", "Xtream & M3U Tester • فحص 100 رابط دفعة واحدة", VipUiHelper.BtnVariant.NEON_GREEN) {
             startActivity(Intent(this, XtreamTesterActivity::class.java))
         }
@@ -202,6 +202,12 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ServerListActivity::class.java))
         }, cardLp().apply { bottomMargin = dp(12) })
 
+        // ===== زر جديد: 🗑️ تنظيف جميع المستخدمين =====
+        content.addView(vipActionCard("🗑️", "تنظيف جميع المستخدمين", "مسح كل الحسابات والأكواد من Google Sheets بضغطة زر 🧹",
+            VipUiHelper.BtnVariant.NEON_PURPLE) {
+            showDeleteAllUsersConfirmDialog()
+        }, cardLp().apply { bottomMargin = dp(12) })
+
         // Row 4: إضافة MAC
         content.addView(vipActionCard("📟", "إضافة MAC / Stalker", "Portal + MAC Address",
             VipUiHelper.BtnVariant.NEON_PURPLE) {
@@ -217,6 +223,112 @@ class MainActivity : AppCompatActivity() {
             setLineSpacing(4f, 1.05f)
             setPadding(0, dp(12), 0, 0)
         })
+    }
+
+    private fun showDeleteAllUsersConfirmDialog() {
+        VipUiHelper.showWarningOverlay(
+            this,
+            title = "⚠️ تحذير مَلكي خطير!",
+            message = "هل أنت متأكد 100% أنك تريد مسح كل المشتركين والأكواد من قاعدة بيانات Google Sheets؟\nهذا الإجراء سيقوم بتنظيف القائمة بالكامل ولا يمكن التراجع عنه!",
+            primaryText = "🗑️ نعم، نظّف قاعدة البيانات",
+            onPrimary = { executeDeleteAllUsers() },
+            secondaryText = "إلغاء",
+            onSecondary = {}
+        )
+    }
+
+    private fun executeDeleteAllUsers() {
+        statusText?.text = "⏳ جاري تنظيف كل المستخدمين من قاعدة البيانات..."
+        val pd = AlertDialog.Builder(this)
+            .setTitle("🧹 تنظيف قاعدة البيانات")
+            .setMessage("جاري جلب وحذف جميع المستخدمين...")
+            .setCancelable(false)
+            .create()
+        pd.show()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val encSecret = enc(ADMIN_SECRET)
+                
+                // 1. نجرب إرسال action=delete_all_users
+                val deleteAllUrl = "$GOOGLE_SCRIPT?action=delete_all_users&secret=$encSecret"
+                val req1 = Request.Builder().url(deleteAllUrl).get().build()
+                client.newCall(req1).execute().use { res1 ->
+                    val body1 = res1.body?.string().orEmpty()
+                    try {
+                        val j1 = JSONObject(body1)
+                        if (j1.optBoolean("success", false)) {
+                            withContext(Dispatchers.Main) {
+                                pd.dismiss()
+                                statusText?.text = "✅ تم تنظيف جميع المستخدمين بنجاح!"
+                                VipUiHelper.showSuccessOverlay(
+                                    this@MainActivity,
+                                    "🧹 تم التنظيف",
+                                    "تم مسح جميع المشتركين والأكواد من Google Sheet بنجاح ✓",
+                                    "رائع!",
+                                    {}
+                                )
+                            }
+                            return@launch
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 2. إذا لم ينجح أو لم يكن مدعوماً، نستخدم حلقة (Loop) تجلب الجميع وتحذفهم
+                val getAllUrl = "$GOOGLE_SCRIPT?action=get_all_users&secret=$encSecret"
+                val req2 = Request.Builder().url(getAllUrl).get().build()
+                client.newCall(req2).execute().use { res2 ->
+                    val body2 = res2.body?.string().orEmpty()
+                    val json2 = JSONObject(body2)
+                    val arr = json2.optJSONArray("users") ?: JSONArray()
+                    
+                    val total = arr.length()
+                    if (total == 0) {
+                        withContext(Dispatchers.Main) {
+                            pd.dismiss()
+                            statusText?.text = "✅ قاعدة البيانات نظيفة بالفعل (لا يوجد مستخدمون)."
+                            VipUiHelper.showSuccessOverlay(this@MainActivity, "🧹 قاعدة البيانات نظيفة", "لا يوجد أي مستخدمين في القائمة ✓", "حسناً", {})
+                        }
+                        return@launch
+                    }
+
+                    var deletedCount = 0
+                    for (i in 0 until total) {
+                        val u = arr.getJSONObject(i)
+                        val code = u.optString("code")
+                        if (code.isNotBlank()) {
+                            withContext(Dispatchers.Main) {
+                                pd.setMessage("جاري مسح المستخدم ${i + 1} / $total\n(الكود: $code)...")
+                            }
+                            val delUrl = "$GOOGLE_SCRIPT?action=delete_user&secret=$encSecret&code=${enc(code)}"
+                            try {
+                                client.newCall(Request.Builder().url(delUrl).get().build()).execute().close()
+                                deletedCount++
+                            } catch (_: Exception) {}
+                        }
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        pd.dismiss()
+                        statusText?.text = "✅ تم تنظيف $deletedCount / $total مستخدم."
+                        VipUiHelper.showSuccessOverlay(
+                            this@MainActivity,
+                            "🧹 تم التنظيف الشامل",
+                            "تم مسح $deletedCount مستخدم من قاعدة بيانات Google Sheets بنجاح ✓",
+                            "ممتاز!",
+                            {}
+                        )
+                    }
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    pd.dismiss()
+                    statusText?.text = "❌ فشل التنظيف: ${e.localizedMessage}"
+                    VipUiHelper.showErrorOverlay(this@MainActivity, "❌ حدث خطأ أثناء التنظيف:\n${e.localizedMessage}")
+                }
+            }
+        }
     }
 
     private fun buildStatRow(): View {
