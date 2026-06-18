@@ -202,6 +202,12 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ServerListActivity::class.java))
         }, cardLp().apply { bottomMargin = dp(12) })
 
+        // ===== زر جديد: 👁️ إدارة وإخفاء فئات السيرفر (Groups) =====
+        content.addView(vipActionCard("👁️", "إدارة وإخفاء فئات السيرفر", "التحكم عن بعد في الفئات التي تعرض في تطبيق المشاهدة 🟢🔴",
+            VipUiHelper.BtnVariant.NEON_GREEN) {
+            startActivity(Intent(this, CategoryVisibilityControlActivity::class.java))
+        }, cardLp().apply { bottomMargin = dp(12) })
+
         // ===== زر جديد: 🗑️ تنظيف جميع المستخدمين =====
         content.addView(vipActionCard("🗑️", "تنظيف جميع المستخدمين", "مسح كل الحسابات والأكواد من Google Sheets بضغطة زر 🧹",
             VipUiHelper.BtnVariant.NEON_PURPLE) {

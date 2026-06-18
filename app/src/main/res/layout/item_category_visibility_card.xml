@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_purple_panel"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp"
+    android:layout_marginBottom="8dp">
+
+    <TextView
+        android:id="@+id/catIconImg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="📁"
+        android:textSize="20sp"
+        android:layout_marginEnd="12dp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/catNameText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Category Name"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/catCountText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 channels"
+            android:textColor="#A5B4FC"
+            android:textSize="11sp"
+            android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+    <Switch
+        android:id="@+id/catVisibilitySwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🟢 إظهار"
+        android:textColor="#39FF8B"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:checked="true" />
+</LinearLayout>
