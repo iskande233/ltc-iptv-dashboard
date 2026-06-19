@@ -177,7 +177,8 @@ object PreparedCatalogBuilder {
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
                     val id = o.optString("stream_id", o.optString("series_id"))
-                    val name = o.optString("name").ifBlank { continue }
+                    val name = o.optString("name")
+                    if (name.isBlank()) continue
                     val icon = o.optString("stream_icon", o.optString("cover", ""))
                     val category = categoryMap[o.optString("category_id")] ?: when (type) {
                         "movie" -> "Movies"
