@@ -100,6 +100,66 @@ object PreparedCatalogBuilder {
         )
     }
 
+    fun buildFastForTv(
+        rawSourceUrl: String,
+        hiddenCategories: Set<String>,
+        beinKeywords: List<String>,
+        beinMaxKeywords: List<String>,
+        alwanKeywords: List<String>
+    ): BuiltCatalogs {
+        val normalized = rawSourceUrl.trim().replace("&amp;", "&")
+        val hidden = hiddenCategories.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+        val liveItems = buildLiveOnlyItems(normalized)
+        val curatedLive = curateForArabicAudience(liveItems).ifEmpty { liveItems }
+            .filter { it.contentType == "live" && !hidden.contains(it.category.trim().lowercase()) }
+            .distinctBy { it.streamUrl }
+
+        fun text(item: PreparedItem) = "${item.name} ${item.category}".lowercase()
+        fun containsAny(text: String, tokens: List<String>) = tokens.any { token -> text.contains(token.trim().lowercase()) }
+        fun firstNumber(text: String): Int = Regex("\\d+").find(text)?.value?.toIntOrNull() ?: 999
+
+        val bein = curatedLive
+            .filter { item ->
+                val t = text(item)
+                containsAny(t, beinKeywords) || containsAny(t, alwanKeywords)
+            }
+            .sortedWith(
+                compareBy<PreparedItem> { item ->
+                    val t = text(item)
+                    when {
+                        containsAny(t, beinKeywords) && containsAny(t, beinMaxKeywords) -> 0
+                        containsAny(t, beinKeywords) -> 1
+                        containsAny(t, alwanKeywords) -> 2
+                        else -> 3
+                    }
+                }.thenBy { firstNumber(text(it)) }.thenBy { text(it) }
+            )
+
+        return BuiltCatalogs(
+            liveJson = toJson(curatedLive),
+            beinJson = toJson(bein),
+            moviesJson = "[]",
+            seriesJson = "[]",
+            liveCount = curatedLive.size,
+            beinCount = bein.size,
+            moviesCount = 0,
+            seriesCount = 0
+        )
+    }
+
+    private fun buildLiveOnlyItems(rawSourceUrl: String): List<PreparedItem> {
+        val xtream = parseXtreamInfo(rawSourceUrl)
+        if (xtream != null) {
+            val liveCats = fetchCategoryMap(xtream, "get_live_categories")
+            val fromApi = fetchXtreamItems(xtream, "get_live_streams", "live", liveCats)
+            if (fromApi.isNotEmpty()) return fromApi
+        }
+        return runCatching {
+            val body = downloadM3uFirstSuccess(rawSourceUrl)
+            parseM3u(body).filter { it.contentType == "live" }
+        }.getOrDefault(emptyList())
+    }
+
     private fun buildPreparedItems(rawSourceUrl: String): List<PreparedItem> {
         val normalized = rawSourceUrl.trim().replace("&amp;", "&")
 

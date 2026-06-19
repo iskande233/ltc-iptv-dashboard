@@ -442,7 +442,8 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 val beinMaxKeywords = inputBeinMaxKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
                 val alwanKeywords = inputAlwanKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
 
-                val catalogs = PreparedCatalogBuilder.build(
+                withContext(Dispatchers.Main) { statusText.text = "⏳ تجهيز Live و beIN بسرعة..." }
+                val catalogs = PreparedCatalogBuilder.buildFastForTv(
                     source.url,
                     hiddenSet,
                     beinKeywords,
@@ -450,10 +451,10 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                     alwanKeywords
                 )
 
+                withContext(Dispatchers.Main) { statusText.text = "⏳ رفع كتالوج Live..." }
                 uploadPreparedCatalog("live", catalogs.liveJson)
+                withContext(Dispatchers.Main) { statusText.text = "⏳ رفع كتالوج beIN..." }
                 uploadPreparedCatalog("bein", catalogs.beinJson)
-                uploadPreparedCatalog("movies", catalogs.moviesJson)
-                uploadPreparedCatalog("series", catalogs.seriesJson)
 
                 val broadcastUrl = "${apiUrl()}?action=update_master_url&secret=${enc(SECRET)}&master_url=${enc(source.url)}"
                 val response = client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().use { res ->
@@ -470,11 +471,11 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     updateCurrentPublishedSourceUi()
-                    statusText.text = "✅ تم تعميم ${source.name} وتجهيز Live/beIN/Movies/Series بسرعة"
+                    statusText.text = "✅ تم تعميم ${source.name} وتجهيز Live و beIN بسرعة"
                     VipUiHelper.showSuccessOverlay(
                         this@CategoryVisibilityControlActivity,
                         "🚀 تم تعميم المصدر الرسمي",
-                        "المصدر: ${source.name}\nLive: ${catalogs.liveCount}\nbeIN: ${catalogs.beinCount}\nMovies: ${catalogs.moviesCount}\nSeries: ${catalogs.seriesCount}",
+                        "المصدر: ${source.name}\nLive: ${catalogs.liveCount}\nbeIN: ${catalogs.beinCount}\nتم تفعيل التسريع الجذري للتلفاز في البث المباشر و beIN.",
                         "حسناً",
                         {}
                     )
