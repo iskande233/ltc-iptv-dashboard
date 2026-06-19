@@ -229,9 +229,18 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("admin_prefs", MODE_PRIVATE)
         val publishedName = prefs.getString("published_source_name", "")?.trim().orEmpty()
         val publishedUrl = prefs.getString("published_source_url", "")?.trim().orEmpty()
+        val publishedExpiry = prefs.getString("published_source_expiry", "")?.trim().orEmpty()
         currentPublishedSourceText.text = when {
-            publishedName.isNotBlank() -> "📡 المصدر المعمم الحالي: $publishedName\n${publishedUrl.take(90)}"
-            publishedUrl.isNotBlank() -> "📡 المصدر المعمم الحالي:\n${publishedUrl.take(90)}"
+            publishedName.isNotBlank() -> buildString {
+                append("📡 المصدر المعمم الحالي: ").append(publishedName)
+                if (publishedExpiry.isNotBlank()) append("\n").append(publishedExpiry)
+                append("\n").append(publishedUrl.take(90))
+            }
+            publishedUrl.isNotBlank() -> buildString {
+                append("📡 المصدر المعمم الحالي:\n")
+                if (publishedExpiry.isNotBlank()) append(publishedExpiry).append("\n")
+                append(publishedUrl.take(90))
+            }
             else -> "📡 المصدر المعمم الحالي: —"
         }
     }
@@ -438,6 +447,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 getSharedPreferences("admin_prefs", MODE_PRIVATE).edit()
                     .putString("published_source_name", source.name)
                     .putString("published_source_url", source.url)
+                    .putString("published_source_expiry", source.expiry)
                     .apply()
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
