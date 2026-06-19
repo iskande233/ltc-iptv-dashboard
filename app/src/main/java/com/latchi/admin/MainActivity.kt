@@ -277,5 +277,6 @@ class MainActivity : AppCompatActivity() {
         LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             .apply { bottomMargin = dp(12) }
 
+    private fun enc(v: String): String = URLEncoder.encode(v, "UTF-8")
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }
