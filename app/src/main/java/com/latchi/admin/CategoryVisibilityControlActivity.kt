@@ -53,6 +53,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     private lateinit var inputSourceUrl: EditText
     private lateinit var btnSaveSource: TextView
     private lateinit var btnTestSavedSources: TextView
+    private lateinit var currentPublishedSourceText: TextView
     private lateinit var savedSourcesSummaryText: TextView
     private lateinit var savedSourcesContainer: LinearLayout
     private lateinit var btnExtractGroups: TextView
@@ -94,6 +95,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         setupListeners()
         loadCurrentRemoteConfig(silent = true)
         loadSavedSources()
+        updateCurrentPublishedSourceUi()
     }
 
     private fun setFindViewById() {
@@ -110,6 +112,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         inputSourceUrl = findViewById(R.id.inputSourceUrl)
         btnSaveSource = findViewById(R.id.btnSaveSource)
         btnTestSavedSources = findViewById(R.id.btnTestSavedSources)
+        currentPublishedSourceText = findViewById(R.id.currentPublishedSourceText)
         savedSourcesSummaryText = findViewById(R.id.savedSourcesSummaryText)
         savedSourcesContainer = findViewById(R.id.savedSourcesContainer)
         btnExtractGroups = findViewById(R.id.btnExtractGroups)
@@ -222,8 +225,20 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         renderSavedSources()
     }
 
+    private fun updateCurrentPublishedSourceUi() {
+        val prefs = getSharedPreferences("admin_prefs", MODE_PRIVATE)
+        val publishedName = prefs.getString("published_source_name", "")?.trim().orEmpty()
+        val publishedUrl = prefs.getString("published_source_url", "")?.trim().orEmpty()
+        currentPublishedSourceText.text = when {
+            publishedName.isNotBlank() -> "📡 المصدر المعمم الحالي: $publishedName\n${publishedUrl.take(90)}"
+            publishedUrl.isNotBlank() -> "📡 المصدر المعمم الحالي:\n${publishedUrl.take(90)}"
+            else -> "📡 المصدر المعمم الحالي: —"
+        }
+    }
+
     private fun renderSavedSources() {
         savedSourcesContainer.removeAllViews()
+        updateCurrentPublishedSourceUi()
         if (savedSources.isEmpty()) {
             savedSourcesSummaryText.text = "🧾 لا توجد روابط محفوظة بعد"
             return
@@ -268,11 +283,16 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(4) })
             row.addView(VipUiHelper.buildMiniButton(this, "⭐ رسمي", VipUiHelper.BtnVariant.GOLD) {
                 SourceBankPrefs.setActive(this@CategoryVisibilityControlActivity, source.id)
+                getSharedPreferences("admin_prefs", MODE_PRIVATE).edit()
+                    .putString("selected_source_name", source.name)
+                    .putString("selected_source_url", source.url)
+                    .apply()
                 loadSavedSources()
+                statusText.text = "⭐ تم تعيين ${source.name} كمصدر محلي رسمي"
             }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
             row.addView(VipUiHelper.buildMiniButton(this, "🚀 تعميم", VipUiHelper.BtnVariant.NEON_GREEN) {
                 inputServerUrl.setText(source.url)
-                executePublishOnly(source.url)
+                executePublishOnly(source)
             }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(4) })
             card.addView(row)
 
@@ -403,21 +423,33 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         }
     }
 
-    private fun executePublishOnly(url: String) {
+    private fun executePublishOnly(source: SavedSource) {
         progressBar.visibility = View.VISIBLE
-        statusText.text = "⏳ جاري تعميم الرابط الرسمي..."
+        statusText.text = "⏳ جاري تعميم ${source.name} كرابط رسمي..."
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val broadcastUrl = "${apiUrl()}?action=update_master_url&secret=${enc(SECRET)}&master_url=${enc(url)}"
+                val broadcastUrl = "${apiUrl()}?action=update_master_url&secret=${enc(SECRET)}&master_url=${enc(source.url)}"
                 val response = client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().use { res ->
                     val body = res.body?.string().orEmpty()
                     if (!res.isSuccessful) throw Exception("HTTP ${res.code}")
                     JSONObject(body)
                 }
                 if (!response.optBoolean("success", false)) throw Exception(response.optString("message", "فشل التعميم"))
+                getSharedPreferences("admin_prefs", MODE_PRIVATE).edit()
+                    .putString("published_source_name", source.name)
+                    .putString("published_source_url", source.url)
+                    .apply()
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
-                    statusText.text = "✅ تم تعميم الرابط الرسمي ورفع التحديث"
+                    updateCurrentPublishedSourceUi()
+                    statusText.text = "✅ تم تعميم ${source.name} ورفع التحديث"
+                    VipUiHelper.showSuccessOverlay(
+                        this@CategoryVisibilityControlActivity,
+                        "🚀 تم تعميم المصدر الرسمي",
+                        "المصدر: ${source.name}\nالرابط: ${source.url.take(120)}",
+                        "حسناً",
+                        {}
+                    )
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {

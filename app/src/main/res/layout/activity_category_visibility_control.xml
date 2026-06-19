@@ -315,10 +315,20 @@
                 </LinearLayout>
 
                 <TextView
-                    android:id="@+id/savedSourcesSummaryText"
+                    android:id="@+id/currentPublishedSourceText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
+                    android:text="📡 المصدر المعمم الحالي: —"
+                    android:textColor="#FFD700"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/savedSourcesSummaryText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
                     android:text="🧾 لا توجد روابط محفوظة بعد"
                     android:textColor="#7FE6FF"
                     android:textSize="13sp"

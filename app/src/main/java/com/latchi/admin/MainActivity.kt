@@ -10,13 +10,16 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 /**
@@ -31,6 +34,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbxThygspXN6eB8cDUfY7XavKmhXZfewEUfQqd3vARScZ5y7adterInsbXshNkgPgfiF/exec"
+        private const val ADMIN_SECRET = "LatchiAdmin2026"
         private const val APP_VERSION = "3.0.0 CONTROL"
     }
 
@@ -109,6 +113,28 @@ class MainActivity : AppCompatActivity() {
         horizontalScroll.addView(cardsRow)
         content.addView(horizontalScroll, cardLp())
 
+        content.addView(sectionTitle("👥 المستخدمون"))
+        val usersScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val usersRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        val smallWidth = dp(210)
+        usersRow.addView(dashboardCard("➕", "إضافة مستخدم جديد", "توليد كود جديد وتسجيله في Google Sheet") {
+            startActivity(Intent(this, AddUserActivity::class.java))
+        }, LinearLayout.LayoutParams(smallWidth, dp(170)).apply { marginEnd = dp(10) })
+        usersRow.addView(dashboardCard("👥", "رؤية جميع المستخدمين", "إدارة المستخدمين والسيرفرات والحذف الفردي") {
+            startActivity(Intent(this, ServerListActivity::class.java))
+        }, LinearLayout.LayoutParams(smallWidth, dp(170)).apply { marginEnd = dp(10) })
+        usersRow.addView(dashboardCard("🗑️", "حذف جميع المستخدمين", "تنظيف كل المستخدمين من Google Sheet") {
+            showDeleteAllUsersConfirmDialog()
+        }, LinearLayout.LayoutParams(smallWidth, dp(170)))
+        usersScroll.addView(usersRow)
+        content.addView(usersScroll, cardLp())
+
         content.addView(VipUiHelper.buildCard(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
@@ -160,6 +186,48 @@ class MainActivity : AppCompatActivity() {
             }
             addView(serverStatusText)
             addView(revisionText)
+        }
+    }
+
+    private fun showDeleteAllUsersConfirmDialog() {
+        VipUiHelper.showWarningOverlay(
+            this,
+            title = "⚠️ تحذير خطير",
+            message = "هل تريد حذف جميع المستخدمين من Google Sheet؟ هذا الإجراء لا يمكن التراجع عنه.",
+            primaryText = "🗑️ نعم، احذف الكل",
+            onPrimary = { executeDeleteAllUsers() },
+            secondaryText = "إلغاء",
+            onSecondary = {}
+        )
+    }
+
+    private fun executeDeleteAllUsers() {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("🧹 تنظيف قاعدة البيانات")
+            .setMessage("جاري حذف جميع المستخدمين...")
+            .setCancelable(false)
+            .create()
+        progress.show()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = "$GOOGLE_SCRIPT?action=delete_all_users&secret=${enc(ADMIN_SECRET)}"
+                val response = client.newCall(Request.Builder().url(url).get().build()).execute().use { res ->
+                    val body = res.body?.string().orEmpty()
+                    if (!res.isSuccessful) throw Exception("HTTP ${res.code}")
+                    JSONObject(body)
+                }
+                if (!response.optBoolean("success", false)) throw Exception(response.optString("message", "فشل الحذف"))
+                val deleted = response.optInt("deleted_count", 0)
+                withContext(Dispatchers.Main) {
+                    progress.dismiss()
+                    VipUiHelper.showSuccessOverlay(this@MainActivity, "✅ تم الحذف", "تم حذف $deleted مستخدم من Google Sheet", "حسناً", {})
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progress.dismiss()
+                    VipUiHelper.showErrorOverlay(this@MainActivity, "❌ فشل حذف المستخدمين:\n${e.localizedMessage}")
+                }
+            }
         }
     }
 
