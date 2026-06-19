@@ -51,7 +51,7 @@ class CodemagicCenterActivity : AppCompatActivity() {
 
     companion object {
         private const val API_BASE = "https://api.codemagic.io"
-        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbzuPV0N6lmytlgWd5EO21Wpxj1cqkKFMZ1n_T4ANsofXuk5BTW499hLYRWiHAazyX-E/exec"
+        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbxThygspXN6eB8cDUfY7XavKmhXZfewEUfQqd3vARScZ5y7adterInsbXshNkgPgfiF/exec"
         private const val SECRET = "LatchiAdmin2026"
         private const val PREFS_KEY_CM_TOKEN = "codemagic_token"
     }
