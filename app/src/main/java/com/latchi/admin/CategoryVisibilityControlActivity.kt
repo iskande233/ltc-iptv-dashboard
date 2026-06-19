@@ -666,6 +666,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         value.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     // ─────────────────────────────────────────────────────────────
     // محول الفئات
