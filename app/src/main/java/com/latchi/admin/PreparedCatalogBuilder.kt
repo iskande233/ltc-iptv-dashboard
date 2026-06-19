@@ -4,6 +4,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 object PreparedCatalogBuilder {
@@ -27,6 +30,12 @@ object PreparedCatalogBuilder {
         val contentType: String
     )
 
+    private data class XtreamInfo(
+        val server: String,
+        val username: String,
+        val password: String
+    )
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -42,8 +51,7 @@ object PreparedCatalogBuilder {
         beinMaxKeywords: List<String>,
         alwanKeywords: List<String>
     ): BuiltCatalogs {
-        val body = downloadM3u(normalizeSourceUrl(rawSourceUrl))
-        val parsed = parseM3u(body)
+        val parsed = buildPreparedItems(rawSourceUrl)
         val curated = curateForArabicAudience(parsed).ifEmpty { parsed }
 
         val hidden = hiddenCategories.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
@@ -92,28 +100,132 @@ object PreparedCatalogBuilder {
         )
     }
 
-    private fun normalizeSourceUrl(raw: String): String {
-        var url = raw.trim().replace("&amp;", "&")
-        if (url.contains("get.php", ignoreCase = true)) {
-            if (!url.contains("type=", ignoreCase = true)) {
-                url += if (url.contains("?")) "&type=m3u_plus" else "?type=m3u_plus"
-            }
-            url = url.replace("type=m3u", "type=m3u_plus", ignoreCase = true)
-            if (!url.contains("output=", ignoreCase = true)) url += "&output=ts"
+    private fun buildPreparedItems(rawSourceUrl: String): List<PreparedItem> {
+        val normalized = rawSourceUrl.trim().replace("&amp;", "&")
+        val xtream = parseXtreamInfo(normalized)
+        if (xtream != null) {
+            val fromApi = fetchXtreamCatalogs(xtream)
+            if (fromApi.isNotEmpty()) return fromApi
         }
-        return url
+        val body = downloadM3uFirstSuccess(normalized)
+        return parseM3u(body)
     }
 
-    private fun downloadM3u(url: String): String {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 10)")
-            .get()
-            .build()
-        return client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
-            response.body?.string().orEmpty().replace("\uFEFF", "")
+    private fun parseXtreamInfo(sourceUrl: String): XtreamInfo? {
+        return try {
+            if (!sourceUrl.contains("get.php", ignoreCase = true)) return null
+            val uri = URI(sourceUrl)
+            val server = "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+            val params = (uri.rawQuery ?: "").split("&").mapNotNull {
+                val kv = it.split("=", limit = 2)
+                if (kv.size == 2) URLDecoder.decode(kv[0], "UTF-8") to URLDecoder.decode(kv[1], "UTF-8") else null
+            }.toMap()
+            val user = params["username"] ?: return null
+            val pass = params["password"] ?: return null
+            XtreamInfo(server, user, pass)
+        } catch (_: Exception) {
+            null
         }
+    }
+
+    private fun fetchXtreamCatalogs(info: XtreamInfo): List<PreparedItem> {
+        val liveCats = fetchCategoryMap(info, "get_live_categories")
+        val vodCats = fetchCategoryMap(info, "get_vod_categories")
+        val seriesCats = fetchCategoryMap(info, "get_series_categories")
+        return fetchXtreamItems(info, "get_live_streams", "live", liveCats) +
+            fetchXtreamItems(info, "get_vod_streams", "movie", vodCats) +
+            fetchXtreamItems(info, "get_series", "series", seriesCats)
+    }
+
+    private fun fetchCategoryMap(info: XtreamInfo, action: String): Map<String, String> {
+        val url = "${info.server}/player_api.php?username=${urlEncode(info.username)}&password=${urlEncode(info.password)}&action=$action"
+        val request = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").get().build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return emptyMap()
+                val arr = JSONArray(response.body?.string().orEmpty())
+                val map = linkedMapOf<String, String>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val id = o.optString("category_id")
+                    val name = o.optString("category_name")
+                    if (id.isNotBlank() && name.isNotBlank()) map[id] = normalizeCategory(name)
+                }
+                map
+            }
+        } catch (_: Exception) { emptyMap() }
+    }
+
+    private fun fetchXtreamItems(info: XtreamInfo, action: String, type: String, categoryMap: Map<String, String>): List<PreparedItem> {
+        val url = "${info.server}/player_api.php?username=${urlEncode(info.username)}&password=${urlEncode(info.password)}&action=$action"
+        val request = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").get().build()
+        val out = mutableListOf<PreparedItem>()
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return emptyList()
+                val arr = JSONArray(response.body?.string().orEmpty())
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val id = o.optString("stream_id", o.optString("series_id"))
+                    val name = o.optString("name").ifBlank { continue }
+                    val icon = o.optString("stream_icon", o.optString("cover", ""))
+                    val category = categoryMap[o.optString("category_id")] ?: when (type) {
+                        "movie" -> "Movies"
+                        "series" -> "Series"
+                        else -> "Live TV"
+                    }
+                    val ext = o.optString("container_extension", "mp4").ifBlank { "mp4" }
+                    val stream = when (type) {
+                        "live" -> if (id.isNotBlank()) "${info.server}/live/${info.username}/${info.password}/$id.ts" else ""
+                        "movie" -> if (id.isNotBlank()) "${info.server}/movie/${info.username}/${info.password}/$id.$ext" else ""
+                        else -> if (id.isNotBlank()) "series://$id" else ""
+                    }
+                    if (stream.isNotBlank()) out.add(PreparedItem(name, icon, stream, category, type))
+                }
+            }
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        return out
+    }
+
+    private fun buildCandidateUrls(raw: String): List<String> {
+        val clean = raw.trim().replace("&amp;", "&")
+        val set = linkedSetOf<String>()
+        set.add(clean)
+        if (clean.contains("get.php", ignoreCase = true)) {
+            val plus = if (clean.contains("type=", ignoreCase = true)) {
+                clean.replace("type=m3u", "type=m3u_plus", ignoreCase = true)
+            } else "$clean${if (clean.contains("?")) "&" else "?"}type=m3u_plus"
+            val ts = if (plus.contains("output=", ignoreCase = true)) plus.replace("output=m3u8", "output=ts", ignoreCase = true) else "$plus&output=ts"
+            val m3u8 = if (plus.contains("output=", ignoreCase = true)) plus.replace("output=ts", "output=m3u8", ignoreCase = true) else "$plus&output=m3u8"
+            set.add(plus)
+            set.add(ts)
+            set.add(m3u8)
+        }
+        return set.toList()
+    }
+
+    private fun downloadM3uFirstSuccess(raw: String): String {
+        var lastError = "Unknown"
+        for (candidate in buildCandidateUrls(raw)) {
+            try {
+                val request = Request.Builder()
+                    .url(candidate)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 10)")
+                    .get()
+                    .build()
+                val body = client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+                    response.body?.string().orEmpty().replace("\uFEFF", "")
+                }
+                if (body.contains("#EXTINF", ignoreCase = true)) return body
+                lastError = "Not a valid M3U"
+            } catch (e: Exception) {
+                lastError = e.message ?: "Unknown"
+            }
+        }
+        throw IllegalStateException(lastError)
     }
 
     private fun parseM3u(body: String): List<PreparedItem> {
@@ -179,6 +291,8 @@ object PreparedCatalogBuilder {
         val curated = input.filter { shouldKeepArabicCurated(it) }.distinctBy { it.streamUrl }
         return if (curated.isNotEmpty()) curated else input
     }
+
+    private fun urlEncode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     private fun shouldKeepArabicCurated(item: PreparedItem): Boolean {
         val text = "${item.name} ${item.category}".lowercase()
