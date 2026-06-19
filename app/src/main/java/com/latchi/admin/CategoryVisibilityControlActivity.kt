@@ -44,6 +44,11 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     private lateinit var inputServerUrl: EditText
     private lateinit var btnFetchMaster: TextView
     private lateinit var btnPasteUrl: TextView
+    private lateinit var btnLoadCurrentConfig: TextView
+    private lateinit var inputHiddenCategories: EditText
+    private lateinit var inputBeinKeywords: EditText
+    private lateinit var inputBeinMaxKeywords: EditText
+    private lateinit var inputAlwanKeywords: EditText
     private lateinit var btnExtractGroups: TextView
     private lateinit var quickTogglesRow: LinearLayout
     private lateinit var inputSearchGroup: EditText
@@ -68,7 +73,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     private lateinit var groupsAdapter: GroupsVisibilityAdapter
 
     companion object {
-        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec"
+        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzuPV0N6lmytlgWd5EO21Wpxj1cqkKFMZ1n_T4ANsofXuk5BTW499hLYRWiHAazyX-E/exec"
         private const val SECRET = "LatchiAdmin2026"
     }
 
@@ -80,6 +85,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
 
         setFindViewById()
         setupListeners()
+        loadCurrentRemoteConfig(silent = true)
     }
 
     private fun setFindViewById() {
@@ -87,6 +93,11 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         inputServerUrl = findViewById(R.id.inputServerUrl)
         btnFetchMaster = findViewById(R.id.btnFetchMaster)
         btnPasteUrl = findViewById(R.id.btnPasteUrl)
+        btnLoadCurrentConfig = findViewById(R.id.btnLoadCurrentConfig)
+        inputHiddenCategories = findViewById(R.id.inputHiddenCategories)
+        inputBeinKeywords = findViewById(R.id.inputBeinKeywords)
+        inputBeinMaxKeywords = findViewById(R.id.inputBeinMaxKeywords)
+        inputAlwanKeywords = findViewById(R.id.inputAlwanKeywords)
         btnExtractGroups = findViewById(R.id.btnExtractGroups)
         quickTogglesRow = findViewById(R.id.quickTogglesRow)
         inputSearchGroup = findViewById(R.id.inputSearchGroup)
@@ -112,6 +123,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         }
 
         btnFetchMaster.setOnClickListener { fetchMasterUrl() }
+        btnLoadCurrentConfig.setOnClickListener { loadCurrentRemoteConfig() }
 
         btnExtractGroups.setOnClickListener { extractGroupsFromUrl() }
 
@@ -138,19 +150,30 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         btnSaveAndApply.setOnClickListener { saveAndApplyVisibilitySettings() }
     }
 
+    private fun apiUrl(): String =
+        getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
+
     private fun fetchMasterUrl() {
         progressBar.visibility = View.VISIBLE
         statusText.text = "⏳ جاري جلب السيرفر المعمم من Google Script..."
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
-                val url = "$apiUrl?action=get_live_master_state"
+                val url = "${apiUrl()}?action=get_live_master_state"
                 val req = Request.Builder().url(url).get().build()
 
                 client.newCall(req).execute().use { res ->
                     val body = res.body?.string().orEmpty()
                     val json = JSONObject(body)
-                    val masterUrl = json.optString("master_url", json.optString("masterUrl", ""))
+                    val masterUrl = json.optString(
+                        "master_url",
+                        json.optString(
+                            "masterUrl",
+                            json.optString(
+                                "default_playlist_url",
+                                json.optString("playlist_url", "")
+                            )
+                        )
+                    )
 
                     withContext(Dispatchers.Main) {
                         progressBar.visibility = View.GONE
@@ -167,6 +190,47 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     statusText.text = "❌ فشل الاتصال: ${e.localizedMessage}"
+                }
+            }
+        }
+    }
+
+    private fun loadCurrentRemoteConfig(silent: Boolean = false) {
+        if (!silent) {
+            progressBar.visibility = View.VISIBLE
+            statusText.text = "⏳ جاري تحميل إعدادات الفلترة الحالية..."
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val req = Request.Builder().url("${apiUrl()}?action=get_view_config").get().build()
+                client.newCall(req).execute().use { res ->
+                    val body = res.body?.string().orEmpty()
+                    val json = JSONObject(body)
+                    if (!json.optBoolean("success", false)) throw Exception(json.optString("message", "تعذر تحميل الإعدادات"))
+
+                    val hidden = json.optString("hidden_categories", json.optString("hiddenCategories", ""))
+                    val bein = json.optString("bein_keywords", json.optString("beinKeywords", ""))
+                    val beinMax = json.optString("bein_max_keywords", json.optString("beinMaxKeywords", ""))
+                    val alwan = json.optString("alwan_keywords", json.optString("alwanKeywords", ""))
+                    val masterUrl = json.optString("master_url", json.optString("default_playlist_url", ""))
+
+                    withContext(Dispatchers.Main) {
+                        progressBar.visibility = View.GONE
+                        if (masterUrl.isNotBlank() && inputServerUrl.text.isNullOrBlank()) inputServerUrl.setText(masterUrl)
+                        inputHiddenCategories.setText(hidden)
+                        inputBeinKeywords.setText(bein)
+                        inputBeinMaxKeywords.setText(beinMax)
+                        inputAlwanKeywords.setText(alwan)
+                        if (!silent) statusText.text = "✅ تم تحميل إعدادات الفلترة الحالية من السكريبت"
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressBar.visibility = View.GONE
+                    if (!silent) {
+                        statusText.text = "❌ فشل تحميل الإعدادات: ${e.localizedMessage}"
+                        VipUiHelper.showErrorOverlay(this@CategoryVisibilityControlActivity, "❌ تعذر تحميل إعدادات الفلترة:\n${e.localizedMessage}")
+                    }
                 }
             }
         }
@@ -216,12 +280,10 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                         }
                     }
 
-                    // قراءة الفئات المخفية القديمة من SharedPreferences إذا موجودة
-                    val hiddenPrefs = getSharedPreferences("latchi_hidden_groups_db", MODE_PRIVATE)
-                    val oldHidden = (hiddenPrefs.getString("hidden_list", "") ?: "").split(",").map { it.trim() }.toSet()
+                    val oldHidden = parseCsvSet(inputHiddenCategories.text?.toString().orEmpty())
 
                     val items = countsMap.map { (name, count) ->
-                        GroupItem(name, count, !oldHidden.contains(name))
+                        GroupItem(name, count, !oldHidden.contains(name.trim()))
                     }.sortedBy { it.name }
 
                     extractedGroups.addAll(items)
@@ -259,35 +321,37 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     }
 
     private fun saveAndApplyVisibilitySettings() {
-        if (extractedGroups.isEmpty()) {
-            VipUiHelper.showErrorOverlay(this, "❌ استخرج الفئات أولاً")
+        val hiddenGroups = if (extractedGroups.isNotEmpty()) {
+            extractedGroups.filter { !it.isVisible }.map { it.name.trim() }
+        } else {
+            parseCsvSet(inputHiddenCategories.text?.toString().orEmpty()).toList()
+        }
+        val hiddenStr = hiddenGroups.joinToString(",")
+        inputHiddenCategories.setText(hiddenStr)
+
+        val beinKeywords = inputBeinKeywords.text?.toString().orEmpty().trim()
+        val beinMaxKeywords = inputBeinMaxKeywords.text?.toString().orEmpty().trim()
+        val alwanKeywords = inputAlwanKeywords.text?.toString().orEmpty().trim()
+
+        if (beinKeywords.isBlank() || beinMaxKeywords.isBlank() || alwanKeywords.isBlank()) {
+            VipUiHelper.showErrorOverlay(this, "❌ أكمل كلمات beIN / beIN MAX / ALWAN قبل الحفظ")
             return
         }
 
-        val hiddenGroups = extractedGroups.filter { !it.isVisible }.map { it.name }
-        val hiddenStr = hiddenGroups.joinToString(",")
-
-        // حفظ محلياً في لوحة التحكم
-        getSharedPreferences("latchi_hidden_groups_db", MODE_PRIVATE).edit()
-            .putString("hidden_list", hiddenStr).apply()
-
-        // 💡 إظهار حوار تعميم الخيارات
         val msg = buildString {
-            append("تم تحديد ").append(hiddenGroups.size).append(" فئات للإخفاء 🔴\n")
-            append("و ").append(extractedGroups.size - hiddenGroups.size).append(" فئات للإظهار 🟢\n\n")
-            append("خيارات التعميم الملكية:\n")
-            append("1. إرسال قائمة الإخفاء إلى Google Script (ليقرأها تطبيق المشاهدة).\n")
-            append("2. الخيار الأسطوري: إنشاء وتعميم رابط M3U جديد يحتوي فقط على الفئات الظاهرة (تطبيق الإخفاء 100% من المصدر).")
+            append("سيتم حفظ إعدادات الفلترة الذكية في السكريبت.\n\n")
+            append("الفئات المخفية: ").append(hiddenGroups.size).append("\n")
+            if (extractedGroups.isNotEmpty()) {
+                append("الفئات الظاهرة: ").append(extractedGroups.size - hiddenGroups.size).append("\n")
+            }
+            append("\nثم سيُرفع server_revision لكي يتحدث تطبيق الهاتف والتلفاز مباشرة.")
         }
 
         AlertDialog.Builder(this)
-            .setTitle("🚀 تأكيد حفظ وتعميم الإخفاء")
+            .setTitle("🚀 حفظ إعدادات الفلترة")
             .setMessage(msg)
-            .setPositiveButton("💾 حفظ في السكريبت + ⚡ توليد M3U مفلتر") { _, _ ->
-                executeFullRoyalVisibilityBroadcast(hiddenGroups.toSet(), true)
-            }
-            .setNeutralButton("💾 حفظ في السكريبت فقط") { _, _ ->
-                executeFullRoyalVisibilityBroadcast(hiddenGroups.toSet(), false)
+            .setPositiveButton("💾 حفظ + تعميم") { _, _ ->
+                executeFullRoyalVisibilityBroadcast(hiddenGroups.toSet(), generateCleanM3u = extractedGroups.isNotEmpty())
             }
             .setNegativeButton("إلغاء", null)
             .show()
@@ -298,47 +362,57 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
      */
     private fun executeFullRoyalVisibilityBroadcast(hiddenSet: Set<String>, generateCleanM3u: Boolean) {
         progressBar.visibility = View.VISIBLE
-        statusText.text = "⏳ جاري إرسال إعدادات الإخفاء إلى Google Script..."
+        statusText.text = "⏳ جاري حفظ إعدادات الفلترة في Google Script..."
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
+                val apiUrl = apiUrl()
                 val encSecret = enc(SECRET)
                 val hiddenParam = enc(hiddenSet.joinToString(","))
+                val beinParam = enc(inputBeinKeywords.text?.toString().orEmpty().trim())
+                val beinMaxParam = enc(inputBeinMaxKeywords.text?.toString().orEmpty().trim())
+                val alwanParam = enc(inputAlwanKeywords.text?.toString().orEmpty().trim())
 
-                // 1. إرسال Action إلى سكريبت جوجل
-                val saveUrl = "$apiUrl?action=save_hidden_categories&secret=$encSecret&hidden_categories=$hiddenParam"
-                try {
-                    client.newCall(Request.Builder().url(saveUrl).get().build()).execute().close()
-                } catch (_: Exception) {}
+                val saveUrl = buildString {
+                    append(apiUrl)
+                    append("?action=save_view_config")
+                    append("&secret=").append(encSecret)
+                    append("&hidden_categories=").append(hiddenParam)
+                    append("&bein_keywords=").append(beinParam)
+                    append("&bein_max_keywords=").append(beinMaxParam)
+                    append("&alwan_keywords=").append(alwanParam)
+                }
 
-                // 2. 👑 إرسال أمر فرض التحديث لكي تظهر للزبائن 'تم تحديث السيرفر' وتصفر قائمة الفئات
-                try {
-                    val revUrl = "$apiUrl?action=increment_server_revision&secret=$encSecret"
-                    client.newCall(Request.Builder().url(revUrl).get().build()).execute().close()
-                } catch (_: Exception) {}
+                val saveRes = client.newCall(Request.Builder().url(saveUrl).get().build()).execute().use { res ->
+                    val body = res.body?.string().orEmpty()
+                    if (!res.isSuccessful) throw Exception("HTTP ${res.code}")
+                    JSONObject(body)
+                }
 
-                // 3. إذا اختار توليد M3U نظيف، نستخدم طلب GET مخفف أو الفلترة التلقائية في تطبيق المشاهدة
-                var cleanMasterUrl = ""
+                if (!saveRes.optBoolean("success", false)) {
+                    throw Exception(saveRes.optString("message", "فشل حفظ الإعدادات"))
+                }
+
                 if (generateCleanM3u) {
-                    withContext(Dispatchers.Main) { statusText.text = "⏳ جاري إعداد الرابط النظيف وتعميمه على المشاهدين..." }
+                    withContext(Dispatchers.Main) {
+                        statusText.text = "⏳ تم حفظ الفلاتر. جاري تحديث الرابط المعمم أيضاً..."
+                    }
                     val rawUrl = inputServerUrl.text.toString().trim()
-                    cleanMasterUrl = rawUrl
-                    
-                    // تعميم الرابط مع قائمة الإخفاء
-                    val broadcastUrl = "$apiUrl?action=update_master_url&secret=$encSecret&master_url=${enc(cleanMasterUrl)}&hidden_categories=$hiddenParam"
-                    try {
-                        client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().close()
-                    } catch (_: Exception) {}
+                    if (rawUrl.isNotBlank()) {
+                        val broadcastUrl = "$apiUrl?action=update_master_url&secret=$encSecret&master_url=${enc(rawUrl)}"
+                        try {
+                            client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().close()
+                        } catch (_: Exception) {}
+                    }
                 }
 
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
-                    val successMsg = "✅ تم حفظ إعدادات إخفاء ${hiddenSet.size} فئات، وتعميم تحديث السيرفر بنجاح ✓\nسيتلقى تلفاز وهواتف الزبائن التحديث فوراً وتختفي الفئات غير المرغوبة."
+                    val successMsg = "✅ تم حفظ الفئات المخفية وكلمات beIN / ALWAN في السكريبت، ورفع server_revision بنجاح.\nالتطبيق سيتحدث مباشرة على الهاتف والتلفاز."
                     statusText.text = successMsg
                     VipUiHelper.showSuccessOverlay(
                         this@CategoryVisibilityControlActivity,
-                        "👁️ تم تطبيق الإخفاء وتحديث السيرفر",
+                        "⚙️ تم تحديث الفلاتر الذكية",
                         successMsg,
                         "رائع! 🎉",
                         {}
@@ -354,6 +428,9 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun parseCsvSet(value: String): Set<String> =
+        value.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 

@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec"
+        private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbzuPV0N6lmytlgWd5EO21Wpxj1cqkKFMZ1n_T4ANsofXuk5BTW499hLYRWiHAazyX-E/exec"
         private const val ADMIN_SECRET = "LatchiAdmin2026"
         private const val DEFAULT_CODEMAGIC_TOKEN = "9OVMA35F09K3nv1djPFqSnQIQCKkq_b4_twyExdllp4"
         private const val APP_VERSION = "2.1.0 VIP"
@@ -471,20 +471,27 @@ class MainActivity : AppCompatActivity() {
     private fun checkServerStatus() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val req = Request.Builder().url(GOOGLE_SCRIPT).get().build()
+                val req = Request.Builder().url("$GOOGLE_SCRIPT?action=get_live_master_state").get().build()
                 client.newCall(req).execute().use { res ->
-                    val ok = res.isSuccessful
+                    val body = res.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(body) }.getOrNull()
+                    val ok = res.isSuccessful && (json?.optBoolean("success", false) == true)
+                    val revision = json?.optLong("server_revision", 0L) ?: 0L
                     withContext(Dispatchers.Main) {
-                        serverStatusCard?.text = if (ok) "✅ متصل" else "❌ خطأ ${res.code}"
+                        serverStatusCard?.text = if (ok) {
+                            if (revision > 0L) "✅ متصل\nRev $revision" else "✅ متصل"
+                        } else "❌ خطأ ${res.code}"
                         serverStatusCard?.setTextColor(
                             if (ok) Color.parseColor("#39FF8B") else Color.parseColor("#FF5577")
                         )
+                        statusText?.text = if (ok) "🌐 السكريبت الجديد متصل ويستجيب بنجاح" else "⚠️ تعذر قراءة حالة السكريبت"
                     }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     serverStatusCard?.text = "🔴 غير متصل"
                     serverStatusCard?.setTextColor(Color.parseColor("#FF5577"))
+                    statusText?.text = "❌ تعذر الاتصال بالسكريبت: ${e.localizedMessage}"
                 }
             }
         }

@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
 class SanitizerActivity : AppCompatActivity() {
 
     companion object {
-        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec"
+        private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzuPV0N6lmytlgWd5EO21Wpxj1cqkKFMZ1n_T4ANsofXuk5BTW499hLYRWiHAazyX-E/exec"
         private const val SECRET = "LatchiAdmin2026"
     }
 

@@ -137,7 +137,7 @@ class UserDetailControlActivity : AppCompatActivity() {
     }
 
     private fun getBaseUrl(): String {
-        return getSharedPreferences("admin_prefs", Context.MODE_PRIVATE).getString("apiUrl", "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec") ?: "https://script.google.com/macros/s/AKfycbwoxD7eNi6AVvhw9l_hPzaUkVt1F9U6trUXs28QYuNld_Ip15ZoefcTAdkd4B_DqoGO/exec"
+        return getSharedPreferences("admin_prefs", Context.MODE_PRIVATE).getString("apiUrl", "https://script.google.com/macros/s/AKfycbzuPV0N6lmytlgWd5EO21Wpxj1cqkKFMZ1n_T4ANsofXuk5BTW499hLYRWiHAazyX-E/exec") ?: "https://script.google.com/macros/s/AKfycbzuPV0N6lmytlgWd5EO21Wpxj1cqkKFMZ1n_T4ANsofXuk5BTW499hLYRWiHAazyX-E/exec"
     }
 
     private fun executeToggleStatus() {
