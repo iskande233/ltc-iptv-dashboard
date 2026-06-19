@@ -45,6 +45,8 @@ class MainActivity : AppCompatActivity() {
 
     private var serverStatusText: TextView? = null
     private var revisionText: TextView? = null
+    private var currentSourceTitleText: TextView? = null
+    private var currentSourceDateText: TextView? = null
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguageManager.wrap(newBase))
@@ -144,11 +146,24 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
             addView(TextView(this@MainActivity).apply {
-                text = "🌐 حالة المنظومة"
-                setTextColor(Color.parseColor("#7FE6FF"))
+                text = "📡 السيرفر المعمم الحالي"
+                setTextColor(Color.parseColor("#FFD700"))
                 textSize = 16f
                 setTypeface(null, android.graphics.Typeface.BOLD)
             })
+            currentSourceTitleText = TextView(this@MainActivity).apply {
+                text = "—"
+                setTextColor(Color.WHITE)
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(10), 0, 0)
+            }
+            currentSourceDateText = TextView(this@MainActivity).apply {
+                text = "—"
+                setTextColor(Color.parseColor("#39FF8B"))
+                textSize = 12f
+                setPadding(0, dp(4), 0, 0)
+            }
             serverStatusText = TextView(this@MainActivity).apply {
                 text = "⏳ جاري فحص السكريبت..."
                 setTextColor(Color.parseColor("#F2F4FF"))
@@ -161,6 +176,8 @@ class MainActivity : AppCompatActivity() {
                 textSize = 12f
                 setPadding(0, dp(4), 0, 0)
             }
+            addView(currentSourceTitleText)
+            addView(currentSourceDateText)
             addView(serverStatusText)
             addView(revisionText)
         }
@@ -219,6 +236,10 @@ class MainActivity : AppCompatActivity() {
                     val rev = json?.optLong("server_revision", 0L) ?: 0L
                     val masterUrl = json?.optString("master_url", json.optString("default_playlist_url", "")) ?: ""
                     withContext(Dispatchers.Main) {
+                        val publishedName = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("published_source_name", "")?.trim().orEmpty()
+                        val publishedExpiry = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("published_source_expiry", "")?.trim().orEmpty()
+                        currentSourceTitleText?.text = publishedName.ifBlank { "غير محدد" }
+                        currentSourceDateText?.text = publishedExpiry.ifBlank { "—" }
                         serverStatusText?.text = if (ok) "✅ السكريبت متصل ويشتغل" else "❌ فشل الاتصال بالسكريبت"
                         serverStatusText?.setTextColor(if (ok) Color.parseColor("#39FF8B") else Color.parseColor("#FF5577"))
                         revisionText?.text = if (masterUrl.isNotBlank()) "Revision: $rev\nMaster: ${masterUrl.take(60)}..." else "Revision: $rev"
