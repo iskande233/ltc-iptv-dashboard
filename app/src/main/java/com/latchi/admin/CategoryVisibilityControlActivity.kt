@@ -49,6 +49,12 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     private lateinit var inputBeinKeywords: EditText
     private lateinit var inputBeinMaxKeywords: EditText
     private lateinit var inputAlwanKeywords: EditText
+    private lateinit var inputSourceName: EditText
+    private lateinit var inputSourceUrl: EditText
+    private lateinit var btnSaveSource: TextView
+    private lateinit var btnTestSavedSources: TextView
+    private lateinit var savedSourcesSummaryText: TextView
+    private lateinit var savedSourcesContainer: LinearLayout
     private lateinit var btnExtractGroups: TextView
     private lateinit var quickTogglesRow: LinearLayout
     private lateinit var inputSearchGroup: EditText
@@ -71,6 +77,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     private val extractedGroups = mutableListOf<GroupItem>()
     private var displayedGroups = listOf<GroupItem>()
     private lateinit var groupsAdapter: GroupsVisibilityAdapter
+    private val savedSources = mutableListOf<SavedSource>()
 
     companion object {
         private const val DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbzuPV0N6lmytlgWd5EO21Wpxj1cqkKFMZ1n_T4ANsofXuk5BTW499hLYRWiHAazyX-E/exec"
@@ -86,6 +93,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         setFindViewById()
         setupListeners()
         loadCurrentRemoteConfig(silent = true)
+        loadSavedSources()
     }
 
     private fun setFindViewById() {
@@ -98,6 +106,12 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         inputBeinKeywords = findViewById(R.id.inputBeinKeywords)
         inputBeinMaxKeywords = findViewById(R.id.inputBeinMaxKeywords)
         inputAlwanKeywords = findViewById(R.id.inputAlwanKeywords)
+        inputSourceName = findViewById(R.id.inputSourceName)
+        inputSourceUrl = findViewById(R.id.inputSourceUrl)
+        btnSaveSource = findViewById(R.id.btnSaveSource)
+        btnTestSavedSources = findViewById(R.id.btnTestSavedSources)
+        savedSourcesSummaryText = findViewById(R.id.savedSourcesSummaryText)
+        savedSourcesContainer = findViewById(R.id.savedSourcesContainer)
         btnExtractGroups = findViewById(R.id.btnExtractGroups)
         quickTogglesRow = findViewById(R.id.quickTogglesRow)
         inputSearchGroup = findViewById(R.id.inputSearchGroup)
@@ -124,6 +138,8 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
 
         btnFetchMaster.setOnClickListener { fetchMasterUrl() }
         btnLoadCurrentConfig.setOnClickListener { loadCurrentRemoteConfig() }
+        btnSaveSource.setOnClickListener { saveCurrentSourceToBank() }
+        btnTestSavedSources.setOnClickListener { testSavedSources() }
 
         btnExtractGroups.setOnClickListener { extractGroupsFromUrl() }
 
@@ -190,6 +206,223 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     statusText.text = "❌ فشل الاتصال: ${e.localizedMessage}"
+                }
+            }
+        }
+    }
+
+    private fun loadSavedSources() {
+        savedSources.clear()
+        savedSources.addAll(SourceBankPrefs.load(this).sortedWith(
+            compareByDescending<SavedSource> { it.active }
+                .thenByDescending { it.online }
+                .thenBy { if (it.responseMs > 0L) it.responseMs else Long.MAX_VALUE }
+                .thenByDescending { it.lastCheckedAt }
+        ))
+        renderSavedSources()
+    }
+
+    private fun renderSavedSources() {
+        savedSourcesContainer.removeAllViews()
+        if (savedSources.isEmpty()) {
+            savedSourcesSummaryText.text = "🧾 لا توجد روابط محفوظة بعد"
+            return
+        }
+        val onlineCount = savedSources.count { it.online }
+        val active = savedSources.firstOrNull { it.active }
+        savedSourcesSummaryText.text = "🧾 ${savedSources.size} رابط محفوظ • ✅ $onlineCount شغال" +
+            (if (active != null) " • الرسمي: ${active.name}" else "")
+
+        savedSources.forEach { source ->
+            val card = VipUiHelper.buildCard(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+            }
+            val title = TextView(this).apply {
+                text = (if (source.active) "⭐ " else "") + source.name
+                setTextColor(if (source.active) Color.parseColor("#FFD700") else Color.WHITE)
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+            card.addView(title)
+            val subtitle = TextView(this).apply {
+                text = buildString {
+                    append(if (source.online) "✅ شغال" else "❌ غير مفحوص/متوقف")
+                    append(" • ${source.type.uppercase()}")
+                    if (source.responseMs > 0) append(" • ${source.responseMs}ms")
+                    if (source.expiry.isNotBlank()) append("\n📅 ${source.expiry}")
+                    append("\n${source.url.take(85)}")
+                }
+                setTextColor(Color.parseColor("#B8C0E0"))
+                textSize = 11f
+                setPadding(0, dp(6), 0, 0)
+            }
+            card.addView(subtitle)
+
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(10), 0, 0)
+            }
+            row.addView(VipUiHelper.buildMiniButton(this, "🔎 فحص", VipUiHelper.BtnVariant.NEON_BLUE) {
+                testSingleSavedSource(source)
+            }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(4) })
+            row.addView(VipUiHelper.buildMiniButton(this, "⭐ رسمي", VipUiHelper.BtnVariant.GOLD) {
+                SourceBankPrefs.setActive(this@CategoryVisibilityControlActivity, source.id)
+                loadSavedSources()
+            }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
+            row.addView(VipUiHelper.buildMiniButton(this, "🚀 تعميم", VipUiHelper.BtnVariant.NEON_GREEN) {
+                inputServerUrl.setText(source.url)
+                executePublishOnly(source.url)
+            }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(4) })
+            card.addView(row)
+
+            val row2 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(8), 0, 0)
+            }
+            row2.addView(VipUiHelper.buildMiniButton(this, "📋 نسخ", VipUiHelper.BtnVariant.NEON_PURPLE) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("source_url", source.url))
+                Toast.makeText(this@CategoryVisibilityControlActivity, "✅ تم نسخ الرابط", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(4) })
+            row2.addView(VipUiHelper.buildMiniButton(this, "🗑️ حذف", VipUiHelper.BtnVariant.NEON_PURPLE) {
+                SourceBankPrefs.delete(this@CategoryVisibilityControlActivity, source.id)
+                loadSavedSources()
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(4) })
+            card.addView(row2)
+
+            savedSourcesContainer.addView(card, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(10) })
+        }
+    }
+
+    private fun inferSourceType(url: String): String {
+        val lower = url.lowercase()
+        return when {
+            lower.contains("get.php") || (lower.contains("username=") && lower.contains("password=")) -> "xtream"
+            lower.contains(".m3u") || lower.contains("type=m3u") || lower.contains("type=m3u_plus") -> "m3u"
+            else -> "auto"
+        }
+    }
+
+    private fun saveCurrentSourceToBank() {
+        val name = inputSourceName.text.toString().trim()
+        val url = inputSourceUrl.text.toString().trim().replace("&amp;", "&")
+        if (name.isBlank() || url.isBlank()) {
+            VipUiHelper.showErrorOverlay(this, "❌ اكتب اسم المصدر والرابط أولاً")
+            return
+        }
+        val source = SavedSource(
+            id = "src_${System.currentTimeMillis()}",
+            name = name,
+            url = url,
+            type = inferSourceType(url)
+        )
+        SourceBankPrefs.upsert(this, source)
+        inputSourceName.setText("")
+        inputSourceUrl.setText("")
+        loadSavedSources()
+        statusText.text = "✅ تم حفظ الرابط محلياً داخل الهاتف"
+    }
+
+    private fun testSavedSources() {
+        if (savedSources.isEmpty()) {
+            VipUiHelper.showErrorOverlay(this, "❌ لا توجد روابط محفوظة لفحصها")
+            return
+        }
+        progressBar.visibility = View.VISIBLE
+        statusText.text = "⏳ جاري فحص الروابط المحفوظة..."
+        CoroutineScope(Dispatchers.IO).launch {
+            savedSources.forEachIndexed { index, source ->
+                val tested = testSource(source)
+                SourceBankPrefs.upsert(this@CategoryVisibilityControlActivity, tested)
+                withContext(Dispatchers.Main) {
+                    statusText.text = "⏳ فحص ${index + 1} / ${savedSources.size}: ${source.name}"
+                }
+            }
+            withContext(Dispatchers.Main) {
+                progressBar.visibility = View.GONE
+                loadSavedSources()
+                statusText.text = "✅ تم فحص كل الروابط المحفوظة وترتيبها"
+            }
+        }
+    }
+
+    private fun testSingleSavedSource(source: SavedSource) {
+        progressBar.visibility = View.VISIBLE
+        statusText.text = "⏳ جاري فحص ${source.name}..."
+        CoroutineScope(Dispatchers.IO).launch {
+            val tested = testSource(source)
+            SourceBankPrefs.upsert(this@CategoryVisibilityControlActivity, tested)
+            withContext(Dispatchers.Main) {
+                progressBar.visibility = View.GONE
+                loadSavedSources()
+                statusText.text = if (tested.online) "✅ ${tested.name} شغال" else "❌ ${tested.name} متوقف أو ضعيف"
+            }
+        }
+    }
+
+    private fun testSource(source: SavedSource): SavedSource {
+        val start = System.currentTimeMillis()
+        val updated = source.copy()
+        return try {
+            val xtreamInfo = XtreamMasterInfoHelper.fetchInfo(source.url)
+            if (xtreamInfo.success && xtreamInfo.isOnline) {
+                updated.online = true
+                updated.expiry = if (xtreamInfo.expiryDate == "—") "" else xtreamInfo.expiryDate
+                updated.responseMs = System.currentTimeMillis() - start
+                updated.lastCheckedAt = System.currentTimeMillis()
+                updated.note = xtreamInfo.status
+                updated.type = "xtream"
+                return updated
+            }
+
+            val req = Request.Builder()
+                .url(source.url.replace("&amp;", "&"))
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android)")
+                .get()
+                .build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                updated.online = res.isSuccessful && body.contains("#EXTINF", ignoreCase = true)
+                updated.expiry = ""
+                updated.responseMs = System.currentTimeMillis() - start
+                updated.lastCheckedAt = System.currentTimeMillis()
+                updated.note = if (updated.online) "M3U صالح" else "HTTP ${res.code}"
+                updated.type = if (updated.online) "m3u" else updated.type
+            }
+            updated
+        } catch (e: Exception) {
+            updated.online = false
+            updated.responseMs = System.currentTimeMillis() - start
+            updated.lastCheckedAt = System.currentTimeMillis()
+            updated.note = e.localizedMessage ?: "failed"
+            updated
+        }
+    }
+
+    private fun executePublishOnly(url: String) {
+        progressBar.visibility = View.VISIBLE
+        statusText.text = "⏳ جاري تعميم الرابط الرسمي..."
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val broadcastUrl = "${apiUrl()}?action=update_master_url&secret=${enc(SECRET)}&master_url=${enc(url)}"
+                val response = client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().use { res ->
+                    val body = res.body?.string().orEmpty()
+                    if (!res.isSuccessful) throw Exception("HTTP ${res.code}")
+                    JSONObject(body)
+                }
+                if (!response.optBoolean("success", false)) throw Exception(response.optString("message", "فشل التعميم"))
+                withContext(Dispatchers.Main) {
+                    progressBar.visibility = View.GONE
+                    statusText.text = "✅ تم تعميم الرابط الرسمي ورفع التحديث"
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressBar.visibility = View.GONE
+                    statusText.text = "❌ فشل تعميم الرابط: ${e.localizedMessage}"
                 }
             }
         }

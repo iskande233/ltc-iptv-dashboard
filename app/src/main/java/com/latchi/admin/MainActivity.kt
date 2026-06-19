@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -83,23 +84,29 @@ class MainActivity : AppCompatActivity() {
         content.addView(buildStatusCard())
         content.addView(sectionTitle("🚀 الواجهات الرئيسية"))
 
-        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row1.addView(dashboardCard("📦", "تحديث التطبيق", "نشر APK خارجي أو آخر Build للمستخدمين") {
+        val horizontalScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val cardsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        val cardWidth = dp(220)
+        cardsRow.addView(dashboardCard("📦", "واجهة تحديث التطبيق", "نشر APK خارجي أو آخر Build للمستخدمين") {
             startActivity(Intent(this, AppUpdateCenterActivity::class.java))
-        }, LinearLayout.LayoutParams(0, dp(170), 1f).apply { marginEnd = dp(8) })
-        row1.addView(dashboardCard("🔗", "تعميم السيرفر", "تغيير السيرفر الرسمي للمستخدمين بسرعة") {
+        }, LinearLayout.LayoutParams(cardWidth, dp(180)).apply { marginEnd = dp(10) })
+        cardsRow.addView(dashboardCard("🔗", "واجهة تعميم السيرفر", "تغيير السيرفر الرسمي للمستخدمين بسرعة") {
             startActivity(Intent(this, MasterLinkActivity::class.java))
-        }, LinearLayout.LayoutParams(0, dp(170), 1f).apply { marginStart = dp(8) })
-        content.addView(row1, cardLp())
-
-        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row2.addView(dashboardCard("🧙", "كود ماجيك", "إدارة Builds و APK من Codemagic") {
+        }, LinearLayout.LayoutParams(cardWidth, dp(180)).apply { marginEnd = dp(10) })
+        cardsRow.addView(dashboardCard("🧙", "واجهة كود ماجيك", "إدارة Builds و APK من Codemagic") {
             startActivity(Intent(this, CodemagicCenterActivity::class.java))
-        }, LinearLayout.LayoutParams(0, dp(170), 1f).apply { marginEnd = dp(8) })
-        row2.addView(dashboardCard("🗂️", "بنك المصادر + الفلترة", "حفظ الروابط، اختبارها، والفلاتر الذكية") {
+        }, LinearLayout.LayoutParams(cardWidth, dp(180)).apply { marginEnd = dp(10) })
+        cardsRow.addView(dashboardCard("🗂️", "واجهة بنك المصادر + الفلترة", "حفظ الروابط، اختبارها، اختيار الرسمي، والفلاتر الذكية") {
             startActivity(Intent(this, CategoryVisibilityControlActivity::class.java))
-        }, LinearLayout.LayoutParams(0, dp(170), 1f).apply { marginStart = dp(8) })
-        content.addView(row2, cardLp())
+        }, LinearLayout.LayoutParams(cardWidth, dp(180)))
+        horizontalScroll.addView(cardsRow)
+        content.addView(horizontalScroll, cardLp())
 
         content.addView(VipUiHelper.buildCard(this).apply {
             orientation = LinearLayout.VERTICAL
