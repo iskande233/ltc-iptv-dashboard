@@ -102,13 +102,23 @@ object PreparedCatalogBuilder {
 
     private fun buildPreparedItems(rawSourceUrl: String): List<PreparedItem> {
         val normalized = rawSourceUrl.trim().replace("&amp;", "&")
+
+        // 1) الأفضل دائماً: نجلب الـ M3U نفسه إذا أمكن، لأن روابطه هي الأدق والأقرب لما يشغله المستخدم
+        //    هذا يحافظ على m3u8/ts والروابط الخاصة بالسيرفر كما هي.
+        runCatching {
+            val body = downloadM3uFirstSuccess(normalized)
+            val fromM3u = parseM3u(body)
+            if (fromM3u.isNotEmpty()) return fromM3u
+        }
+
+        // 2) إذا فشل الـ M3U (بعض السيرفرات Xtream تعطي 404 أو تمنع بعض الصيغ) نرجع لـ player_api
         val xtream = parseXtreamInfo(normalized)
         if (xtream != null) {
             val fromApi = fetchXtreamCatalogs(xtream)
             if (fromApi.isNotEmpty()) return fromApi
         }
-        val body = downloadM3uFirstSuccess(normalized)
-        return parseM3u(body)
+
+        return emptyList()
     }
 
     private fun parseXtreamInfo(sourceUrl: String): XtreamInfo? {
