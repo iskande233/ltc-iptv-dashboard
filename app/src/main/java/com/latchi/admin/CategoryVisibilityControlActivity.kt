@@ -434,9 +434,27 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
 
     private fun executePublishOnly(source: SavedSource) {
         progressBar.visibility = View.VISIBLE
-        statusText.text = "⏳ جاري تعميم ${source.name} كرابط رسمي..."
+        statusText.text = "⏳ جاري تجهيز البيانات السريعة + تعميم ${source.name}..."
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val hiddenSet = parseCsvSet(inputHiddenCategories.text?.toString().orEmpty())
+                val beinKeywords = inputBeinKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
+                val beinMaxKeywords = inputBeinMaxKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
+                val alwanKeywords = inputAlwanKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
+
+                val catalogs = PreparedCatalogBuilder.build(
+                    source.url,
+                    hiddenSet,
+                    beinKeywords,
+                    beinMaxKeywords,
+                    alwanKeywords
+                )
+
+                uploadPreparedCatalog("live", catalogs.liveJson)
+                uploadPreparedCatalog("bein", catalogs.beinJson)
+                uploadPreparedCatalog("movies", catalogs.moviesJson)
+                uploadPreparedCatalog("series", catalogs.seriesJson)
+
                 val broadcastUrl = "${apiUrl()}?action=update_master_url&secret=${enc(SECRET)}&master_url=${enc(source.url)}"
                 val response = client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().use { res ->
                     val body = res.body?.string().orEmpty()
@@ -452,11 +470,11 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     updateCurrentPublishedSourceUi()
-                    statusText.text = "✅ تم تعميم ${source.name} ورفع التحديث"
+                    statusText.text = "✅ تم تعميم ${source.name} وتجهيز Live/beIN/Movies/Series بسرعة"
                     VipUiHelper.showSuccessOverlay(
                         this@CategoryVisibilityControlActivity,
                         "🚀 تم تعميم المصدر الرسمي",
-                        "المصدر: ${source.name}\nالرابط: ${source.url.take(120)}",
+                        "المصدر: ${source.name}\nLive: ${catalogs.liveCount}\nbeIN: ${catalogs.beinCount}\nMovies: ${catalogs.moviesCount}\nSeries: ${catalogs.seriesCount}",
                         "حسناً",
                         {}
                     )
@@ -464,9 +482,25 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
-                    statusText.text = "❌ فشل تعميم الرابط: ${e.localizedMessage}"
+                    statusText.text = "❌ فشل التعميم السريع: ${e.localizedMessage}"
                 }
             }
+        }
+    }
+
+    private fun uploadPreparedCatalog(type: String, jsonContent: String) {
+        val form = okhttp3.FormBody.Builder()
+            .add("action", "upload_prepared_catalog")
+            .add("secret", SECRET)
+            .add("catalog_type", type)
+            .add("json_content", jsonContent)
+            .build()
+        val request = Request.Builder().url(apiUrl()).post(form).build()
+        client.newCall(request).execute().use { res ->
+            val body = res.body?.string().orEmpty()
+            if (!res.isSuccessful) throw Exception("HTTP ${res.code}")
+            val json = JSONObject(body)
+            if (!json.optBoolean("success", false)) throw Exception(json.optString("message", "failed upload $type"))
         }
     }
 
