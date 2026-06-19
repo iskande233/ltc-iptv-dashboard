@@ -88,52 +88,29 @@ class MainActivity : AppCompatActivity() {
 
         content.addView(buildStatusCard())
         content.addView(sectionTitle("🚀 الواجهات الرئيسية"))
-
-        val horizontalScroll = android.widget.HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-        }
-        val cardsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 0, 0, dp(8))
-        }
-        val cardWidth = dp(220)
-        cardsRow.addView(dashboardCard("📦", "واجهة تحديث التطبيق", "نشر APK خارجي أو آخر Build للمستخدمين") {
+        content.addView(dashboardCard("📦", "واجهة تحديث التطبيق", "نشر APK خارجي أو آخر Build للمستخدمين") {
             startActivity(Intent(this, AppUpdateCenterActivity::class.java))
-        }, LinearLayout.LayoutParams(cardWidth, dp(180)).apply { marginEnd = dp(10) })
-        cardsRow.addView(dashboardCard("🔗", "واجهة تعميم السيرفر", "تغيير السيرفر الرسمي للمستخدمين بسرعة") {
+        }, cardLp())
+        content.addView(dashboardCard("🔗", "واجهة تعميم السيرفر", "تغيير السيرفر الرسمي للمستخدمين بسرعة") {
             startActivity(Intent(this, MasterLinkActivity::class.java))
-        }, LinearLayout.LayoutParams(cardWidth, dp(180)).apply { marginEnd = dp(10) })
-        cardsRow.addView(dashboardCard("🧙", "واجهة كود ماجيك", "إدارة Builds و APK من Codemagic") {
+        }, cardLp())
+        content.addView(dashboardCard("🧙", "واجهة كود ماجيك", "إدارة Builds و APK من Codemagic") {
             startActivity(Intent(this, CodemagicCenterActivity::class.java))
-        }, LinearLayout.LayoutParams(cardWidth, dp(180)).apply { marginEnd = dp(10) })
-        cardsRow.addView(dashboardCard("🗂️", "واجهة بنك المصادر + الفلترة", "حفظ الروابط، اختبارها، اختيار الرسمي، والفلاتر الذكية") {
+        }, cardLp())
+        content.addView(dashboardCard("🗂️", "واجهة بنك المصادر + الفلترة", "حفظ الروابط، اختبارها، اختيار الرسمي، والفلاتر الذكية") {
             startActivity(Intent(this, CategoryVisibilityControlActivity::class.java))
-        }, LinearLayout.LayoutParams(cardWidth, dp(180)))
-        horizontalScroll.addView(cardsRow)
-        content.addView(horizontalScroll, cardLp())
+        }, cardLp())
 
         content.addView(sectionTitle("👥 المستخدمون"))
-        val usersScroll = android.widget.HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-        }
-        val usersRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 0, 0, dp(8))
-        }
-        val smallWidth = dp(210)
-        usersRow.addView(dashboardCard("➕", "إضافة مستخدم جديد", "توليد كود جديد وتسجيله في Google Sheet") {
+        content.addView(dashboardCard("➕", "واجهة إضافة مستخدم جديد", "توليد كود جديد وتسجيله في Google Sheet") {
             startActivity(Intent(this, AddUserActivity::class.java))
-        }, LinearLayout.LayoutParams(smallWidth, dp(170)).apply { marginEnd = dp(10) })
-        usersRow.addView(dashboardCard("👥", "رؤية جميع المستخدمين", "إدارة المستخدمين والسيرفرات والحذف الفردي") {
-            startActivity(Intent(this, ServerListActivity::class.java))
-        }, LinearLayout.LayoutParams(smallWidth, dp(170)).apply { marginEnd = dp(10) })
-        usersRow.addView(dashboardCard("🗑️", "حذف جميع المستخدمين", "تنظيف كل المستخدمين من Google Sheet") {
+        }, cardLp())
+        content.addView(dashboardCard("👥", "واجهة إدارة المستخدمين", "عرض كل المستخدمين، تحديد متعدد، حذف المحددين أو الكل") {
+            startActivity(Intent(this, UserManagementActivity::class.java))
+        }, cardLp())
+        content.addView(dashboardCard("🗑️", "حذف جميع المستخدمين", "تنظيف كل المستخدمين من Google Sheet") {
             showDeleteAllUsersConfirmDialog()
-        }, LinearLayout.LayoutParams(smallWidth, dp(170)))
-        usersScroll.addView(usersRow)
-        content.addView(usersScroll, cardLp())
+        }, cardLp())
 
         content.addView(VipUiHelper.buildCard(this).apply {
             orientation = LinearLayout.VERTICAL

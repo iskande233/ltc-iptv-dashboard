@@ -27,6 +27,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".AppUpdateCenterActivity" android:exported="false" />
+        <activity android:name=".UserManagementActivity" android:exported="false" />
 
         <!-- 🛠️ Admin Tools — كل واحدة بصفحة مستقلة (الإصلاح الكارثي) -->
         <activity android:name=".SanitizerActivity" android:exported="false" />
