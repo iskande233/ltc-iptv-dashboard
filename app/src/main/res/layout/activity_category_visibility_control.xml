@@ -315,6 +315,14 @@
                 </LinearLayout>
 
                 <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="📦 جهّز محليًا الأقسام التي تريدها، وبعدها عمّمها فورًا بدون انتظار طويل."
+                    android:textColor="#8891B8"
+                    android:textSize="12sp" />
+
+                <TextView
                     android:id="@+id/currentPublishedSourceText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

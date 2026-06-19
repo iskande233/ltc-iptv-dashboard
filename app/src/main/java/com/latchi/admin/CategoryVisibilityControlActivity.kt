@@ -275,6 +275,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                     append(" • ${source.type.uppercase()}")
                     if (source.responseMs > 0) append(" • ${source.responseMs}ms")
                     if (source.expiry.isNotBlank()) append("\n📅 ${source.expiry}")
+                    append("\n📦 Live:${if (source.preparedLiveReady) "✅" else "—"}  beIN:${if (source.preparedBeinReady) "✅" else "—"}  Movies:${if (source.preparedMoviesReady) "✅" else "—"}  Series:${if (source.preparedSeriesReady) "✅" else "—"}")
                     append("\n${source.url.take(85)}")
                 }
                 setTextColor(Color.parseColor("#B8C0E0"))
@@ -309,16 +310,43 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, dp(8), 0, 0)
             }
-            row2.addView(VipUiHelper.buildMiniButton(this, "📋 نسخ", VipUiHelper.BtnVariant.NEON_PURPLE) {
+            row2.addView(VipUiHelper.buildMiniButton(this, "⚡ Live", VipUiHelper.BtnVariant.NEON_BLUE) {
+                generateLocalSection(source, "live")
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(4) })
+            row2.addView(VipUiHelper.buildMiniButton(this, "🏆 beIN", VipUiHelper.BtnVariant.GOLD) {
+                generateLocalSection(source, "bein")
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
+            row2.addView(VipUiHelper.buildMiniButton(this, "🎬 أفلام", VipUiHelper.BtnVariant.NEON_GREEN) {
+                generateLocalSection(source, "movies")
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(4) })
+            card.addView(row2)
+
+            val row3 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(8), 0, 0)
+            }
+            row3.addView(VipUiHelper.buildMiniButton(this, "📺 مسلسلات", VipUiHelper.BtnVariant.NEON_GREEN) {
+                generateLocalSection(source, "series")
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(4) })
+            row3.addView(VipUiHelper.buildMiniButton(this, "📦 عمّم الجاهز", VipUiHelper.BtnVariant.NEON_BLUE) {
+                publishPreparedOnly(source)
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(4); marginEnd = dp(4) })
+            row3.addView(VipUiHelper.buildMiniButton(this, "📋 نسخ", VipUiHelper.BtnVariant.NEON_PURPLE) {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("source_url", source.url))
                 Toast.makeText(this@CategoryVisibilityControlActivity, "✅ تم نسخ الرابط", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(4) })
-            row2.addView(VipUiHelper.buildMiniButton(this, "🗑️ حذف", VipUiHelper.BtnVariant.NEON_PURPLE) {
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(4) })
+            card.addView(row3)
+
+            val row4 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(8), 0, 0)
+            }
+            row4.addView(VipUiHelper.buildMiniButton(this, "🗑️ حذف", VipUiHelper.BtnVariant.NEON_PURPLE) {
                 SourceBankPrefs.delete(this@CategoryVisibilityControlActivity, source.id)
                 loadSavedSources()
-            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginStart = dp(4) })
-            card.addView(row2)
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
+            card.addView(row4)
 
             savedSourcesContainer.addView(card, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -434,7 +462,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
 
     private fun executePublishOnly(source: SavedSource) {
         progressBar.visibility = View.VISIBLE
-        statusText.text = "⏳ جاري تجهيز البيانات السريعة + تعميم ${source.name}..."
+        statusText.text = "⏳ تجهيز سريع أولي لـ ${source.name}..."
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val hiddenSet = parseCsvSet(inputHiddenCategories.text?.toString().orEmpty())
@@ -442,19 +470,78 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 val beinMaxKeywords = inputBeinMaxKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
                 val alwanKeywords = inputAlwanKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
 
-                withContext(Dispatchers.Main) { statusText.text = "⏳ تجهيز Live و beIN بسرعة..." }
-                val catalogs = PreparedCatalogBuilder.buildFastForTv(
-                    source.url,
-                    hiddenSet,
-                    beinKeywords,
-                    beinMaxKeywords,
-                    alwanKeywords
-                )
+                val liveJson = PreparedCatalogBuilder.buildLiveOnly(source.url, hiddenSet)
+                val beinJson = PreparedCatalogBuilder.buildBeinOnly(source.url, hiddenSet, beinKeywords, beinMaxKeywords, alwanKeywords)
+                PreparedLocalCatalogStore.save(this@CategoryVisibilityControlActivity, source.id, "live", liveJson)
+                PreparedLocalCatalogStore.save(this@CategoryVisibilityControlActivity, source.id, "bein", beinJson)
+                val updated = source.copy(preparedLiveReady = true, preparedBeinReady = true)
+                SourceBankPrefs.upsert(this@CategoryVisibilityControlActivity, updated)
 
-                withContext(Dispatchers.Main) { statusText.text = "⏳ رفع كتالوج Live..." }
-                uploadPreparedCatalog("live", catalogs.liveJson)
-                withContext(Dispatchers.Main) { statusText.text = "⏳ رفع كتالوج beIN..." }
-                uploadPreparedCatalog("bein", catalogs.beinJson)
+                publishPreparedOnly(updated)
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressBar.visibility = View.GONE
+                    statusText.text = "❌ فشل التعميم السريع: ${e.localizedMessage}"
+                }
+            }
+        }
+    }
+
+    private fun generateLocalSection(source: SavedSource, type: String) {
+        progressBar.visibility = View.VISIBLE
+        statusText.text = "⏳ جاري توليد $type محليًا لـ ${source.name}..."
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val hiddenSet = parseCsvSet(inputHiddenCategories.text?.toString().orEmpty())
+                val beinKeywords = inputBeinKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
+                val beinMaxKeywords = inputBeinMaxKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
+                val alwanKeywords = inputAlwanKeywords.text?.toString().orEmpty().split(',').map { it.trim() }.filter { it.isNotBlank() }
+                val json = when (type) {
+                    "live" -> PreparedCatalogBuilder.buildLiveOnly(source.url, hiddenSet)
+                    "bein" -> PreparedCatalogBuilder.buildBeinOnly(source.url, hiddenSet, beinKeywords, beinMaxKeywords, alwanKeywords)
+                    "movies" -> PreparedCatalogBuilder.buildMoviesOnly(source.url, hiddenSet)
+                    else -> PreparedCatalogBuilder.buildSeriesOnly(source.url, hiddenSet)
+                }
+                PreparedLocalCatalogStore.save(this@CategoryVisibilityControlActivity, source.id, type, json)
+                val updated = when (type) {
+                    "live" -> source.copy(preparedLiveReady = true)
+                    "bein" -> source.copy(preparedBeinReady = true)
+                    "movies" -> source.copy(preparedMoviesReady = true)
+                    else -> source.copy(preparedSeriesReady = true)
+                }
+                SourceBankPrefs.upsert(this@CategoryVisibilityControlActivity, updated)
+                withContext(Dispatchers.Main) {
+                    progressBar.visibility = View.GONE
+                    loadSavedSources()
+                    statusText.text = "✅ تم توليد $type محليًا وحفظه داخل الهاتف"
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressBar.visibility = View.GONE
+                    statusText.text = "❌ فشل توليد $type: ${e.localizedMessage}"
+                }
+            }
+        }
+    }
+
+    private fun publishPreparedOnly(source: SavedSource) {
+        progressBar.visibility = View.VISIBLE
+        statusText.text = "⏳ جاري رفع البيانات الجاهزة وتعيم ${source.name}..."
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val liveJson = PreparedLocalCatalogStore.read(this@CategoryVisibilityControlActivity, source.id, "live")
+                val beinJson = PreparedLocalCatalogStore.read(this@CategoryVisibilityControlActivity, source.id, "bein")
+                val moviesJson = PreparedLocalCatalogStore.read(this@CategoryVisibilityControlActivity, source.id, "movies")
+                val seriesJson = PreparedLocalCatalogStore.read(this@CategoryVisibilityControlActivity, source.id, "series")
+
+                if (liveJson.isNullOrBlank() || beinJson.isNullOrBlank()) {
+                    throw IllegalStateException("ولد محليًا Live و beIN أولاً قبل التعميم")
+                }
+
+                uploadPreparedCatalog("live", liveJson)
+                uploadPreparedCatalog("bein", beinJson)
+                if (!moviesJson.isNullOrBlank()) uploadPreparedCatalog("movies", moviesJson)
+                if (!seriesJson.isNullOrBlank()) uploadPreparedCatalog("series", seriesJson)
 
                 val broadcastUrl = "${apiUrl()}?action=update_master_url&secret=${enc(SECRET)}&master_url=${enc(source.url)}"
                 val response = client.newCall(Request.Builder().url(broadcastUrl).get().build()).execute().use { res ->
@@ -471,11 +558,11 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     updateCurrentPublishedSourceUi()
-                    statusText.text = "✅ تم تعميم ${source.name} وتجهيز Live و beIN بسرعة"
+                    statusText.text = "✅ تم تعميم ${source.name} من JSON الجاهز المحلي"
                     VipUiHelper.showSuccessOverlay(
                         this@CategoryVisibilityControlActivity,
-                        "🚀 تم تعميم المصدر الرسمي",
-                        "المصدر: ${source.name}\nLive: ${catalogs.liveCount}\nbeIN: ${catalogs.beinCount}\nتم تفعيل التسريع الجذري للتلفاز في البث المباشر و beIN.",
+                        "🚀 تم التعميم من الجاهز",
+                        "المصدر: ${source.name}\nتم رفع Live و beIN الجاهزين محليًا، ومعهما Movies/Series إذا كانت مولدة.",
                         "حسناً",
                         {}
                     )
@@ -483,7 +570,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
-                    statusText.text = "❌ فشل التعميم السريع: ${e.localizedMessage}"
+                    statusText.text = "❌ فشل التعميم من الجاهز: ${e.localizedMessage}"
                 }
             }
         }

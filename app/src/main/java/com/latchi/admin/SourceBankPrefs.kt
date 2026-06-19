@@ -14,7 +14,11 @@ data class SavedSource(
     var expiry: String = "",
     var responseMs: Long = 0L,
     var lastCheckedAt: Long = 0L,
-    var note: String = ""
+    var note: String = "",
+    var preparedLiveReady: Boolean = false,
+    var preparedBeinReady: Boolean = false,
+    var preparedMoviesReady: Boolean = false,
+    var preparedSeriesReady: Boolean = false
 )
 
 object SourceBankPrefs {
@@ -38,7 +42,11 @@ object SourceBankPrefs {
                     expiry = o.optString("expiry", ""),
                     responseMs = o.optLong("responseMs", 0L),
                     lastCheckedAt = o.optLong("lastCheckedAt", 0L),
-                    note = o.optString("note", "")
+                    note = o.optString("note", ""),
+                    preparedLiveReady = o.optBoolean("preparedLiveReady", false),
+                    preparedBeinReady = o.optBoolean("preparedBeinReady", false),
+                    preparedMoviesReady = o.optBoolean("preparedMoviesReady", false),
+                    preparedSeriesReady = o.optBoolean("preparedSeriesReady", false)
                 )
             )
         }
@@ -59,6 +67,10 @@ object SourceBankPrefs {
                 put("responseMs", s.responseMs)
                 put("lastCheckedAt", s.lastCheckedAt)
                 put("note", s.note)
+                put("preparedLiveReady", s.preparedLiveReady)
+                put("preparedBeinReady", s.preparedBeinReady)
+                put("preparedMoviesReady", s.preparedMoviesReady)
+                put("preparedSeriesReady", s.preparedSeriesReady)
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, arr.toString()).apply()
@@ -66,14 +78,24 @@ object SourceBankPrefs {
 
     fun upsert(context: Context, source: SavedSource) {
         val items = load(context)
-        val index = items.indexOfFirst { it.id == source.id }
-        if (index >= 0) items[index] = source else items.add(0, source)
+        val index = items.indexOfFirst { it.id == source.id || it.url.trim().equals(source.url.trim(), true) }
+        if (index >= 0) {
+            val old = items[index]
+            source.active = source.active || old.active
+            if (!source.preparedLiveReady) source.preparedLiveReady = old.preparedLiveReady
+            if (!source.preparedBeinReady) source.preparedBeinReady = old.preparedBeinReady
+            if (!source.preparedMoviesReady) source.preparedMoviesReady = old.preparedMoviesReady
+            if (!source.preparedSeriesReady) source.preparedSeriesReady = old.preparedSeriesReady
+            items[index] = source.copy(id = old.id)
+        } else items.add(0, source)
         save(context, items)
     }
 
     fun delete(context: Context, id: String) {
+        val source = load(context).firstOrNull { it.id == id }
         val items = load(context).filter { it.id != id }
         save(context, items)
+        if (source != null) PreparedLocalCatalogStore.deleteAllForSource(context, source.id)
     }
 
     fun setActive(context: Context, id: String) {

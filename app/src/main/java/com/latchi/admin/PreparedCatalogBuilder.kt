@@ -100,6 +100,54 @@ object PreparedCatalogBuilder {
         )
     }
 
+    fun buildLiveOnly(
+        rawSourceUrl: String,
+        hiddenCategories: Set<String>
+    ): String {
+        val hidden = hiddenCategories.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+        val liveItems = buildLiveOnlyItems(rawSourceUrl.trim().replace("&amp;", "&"))
+        val curatedLive = curateForArabicAudience(liveItems).ifEmpty { liveItems }
+            .filter { it.contentType == "live" && !hidden.contains(it.category.trim().lowercase()) }
+            .distinctBy { it.streamUrl }
+        return toJson(curatedLive)
+    }
+
+    fun buildBeinOnly(
+        rawSourceUrl: String,
+        hiddenCategories: Set<String>,
+        beinKeywords: List<String>,
+        beinMaxKeywords: List<String>,
+        alwanKeywords: List<String>
+    ): String {
+        return buildFastForTv(rawSourceUrl, hiddenCategories, beinKeywords, beinMaxKeywords, alwanKeywords).beinJson
+    }
+
+    fun buildMoviesOnly(
+        rawSourceUrl: String,
+        hiddenCategories: Set<String>
+    ): String {
+        val hidden = hiddenCategories.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+        val items = buildPreparedItems(rawSourceUrl)
+        val curated = curateForArabicAudience(items).ifEmpty { items }
+            .filter { it.contentType == "movie" && !hidden.contains(it.category.trim().lowercase()) }
+            .distinctBy { it.streamUrl }
+            .take(4000)
+        return toJson(curated)
+    }
+
+    fun buildSeriesOnly(
+        rawSourceUrl: String,
+        hiddenCategories: Set<String>
+    ): String {
+        val hidden = hiddenCategories.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+        val items = buildPreparedItems(rawSourceUrl)
+        val curated = curateForArabicAudience(items).ifEmpty { items }
+            .filter { it.contentType == "series" && !hidden.contains(it.category.trim().lowercase()) }
+            .distinctBy { it.streamUrl }
+            .take(4000)
+        return toJson(curated)
+    }
+
     fun buildFastForTv(
         rawSourceUrl: String,
         hiddenCategories: Set<String>,
