@@ -102,6 +102,9 @@ class MainActivity : AppCompatActivity() {
         content.addView(dashboardCard("🗂️", "واجهة بنك المصادر + الفلترة", "حفظ الروابط، اختبارها، اختيار الرسمي، والفلاتر الذكية") {
             startActivity(Intent(this, CategoryVisibilityControlActivity::class.java))
         }, cardLp())
+        content.addView(dashboardCard("🎨", "واجهة منظم الفئات", "إعادة تسمية + ترتيب فئات كل سيرفر محفوظ قبل البث") {
+            startActivity(Intent(this, CategoryOrganizerActivity::class.java))
+        }, cardLp())
 
         content.addView(sectionTitle("👥 المستخدمون"))
         content.addView(dashboardCard("➕", "واجهة إضافة مستخدم جديد", "توليد كود جديد وتسجيله في Google Sheet") {
