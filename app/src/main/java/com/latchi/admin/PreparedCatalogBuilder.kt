@@ -308,19 +308,37 @@ object PreparedCatalogBuilder {
         return out
     }
 
+    /**
+     * 🛡️ v5.2+: بناء قائمة URLs المرشحة مع الحفاظ على الـ URL الأصلي أولاً.
+     *
+     * المنطق الجديد:
+     *  1. الـ URL الأصلي يأتي أولاً (بدون أي تعديل)
+     *  2. فقط إذا فشل، نجرب متغيرات إضافية
+     *  3. لا نُعدّل type= الموجودة
+     *  4. لا نضيف output= إذا كانت موجودة فعلاً
+     *
+     * هذا يحل مشكلة "بعض السيرفرات لا تعمل بعد التحميل":
+     *   - سيرفرات تستخدم type=m3u8 كانت تُحوّل إلى type=m3u_plus
+     *   - سيرفرات تستخدم output=m3u8 كانت تُحوّل إلى output=ts
+     *   - الآن: نحاول الأصل أولاً، فقط إذا فشل نجرب متغيرات
+     */
     private fun buildCandidateUrls(raw: String): List<String> {
         val clean = raw.trim().replace("&amp;", "&")
         val set = linkedSetOf<String>()
+        // 1. الـ URL الأصلي أولاً - بدون أي تعديل
         set.add(clean)
         if (clean.contains("get.php", ignoreCase = true)) {
-            val plus = if (clean.contains("type=", ignoreCase = true)) {
-                clean.replace("type=m3u", "type=m3u_plus", ignoreCase = true)
-            } else "$clean${if (clean.contains("?")) "&" else "?"}type=m3u_plus"
-            val ts = if (plus.contains("output=", ignoreCase = true)) plus.replace("output=m3u8", "output=ts", ignoreCase = true) else "$plus&output=ts"
-            val m3u8 = if (plus.contains("output=", ignoreCase = true)) plus.replace("output=ts", "output=m3u8", ignoreCase = true) else "$plus&output=m3u8"
-            set.add(plus)
-            set.add(ts)
-            set.add(m3u8)
+            // 2. فقط إذا لم يكن type= موجوداً، نضيف type=m3u_plus كمتغير ثانوي
+            if (!clean.contains("type=", ignoreCase = true)) {
+                val plus = "$clean${if (clean.contains("?")) "&" else "?"}type=m3u_plus"
+                set.add(plus)
+            }
+            // 3. متغيرات output= المختلفة - نضيفها كلها كمرشحين
+            //    لكن فقط إذا كانت output= غير موجودة فعلاً
+            if (!clean.contains("output=", ignoreCase = true)) {
+                set.add("$clean${if (clean.contains("?")) "&" else "?"}output=ts")
+                set.add("$clean${if (clean.contains("?")) "&" else "?"}output=m3u8")
+            }
         }
         return set.toList()
     }
