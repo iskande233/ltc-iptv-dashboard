@@ -54,6 +54,9 @@ class CodemagicCenterActivity : AppCompatActivity() {
         private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbxThygspXN6eB8cDUfY7XavKmhXZfewEUfQqd3vARScZ5y7adterInsbXshNkgPgfiF/exec"
         private const val SECRET = "LatchiAdmin2026"
         private const val PREFS_KEY_CM_TOKEN = "codemagic_token"
+        private const val PREFS_KEY_GH_TOKEN = "github_release_token"
+        private const val PREFS_KEY_GH_OWNER = "github_release_owner"
+        private const val PREFS_KEY_GH_REPO = "github_release_repo"
     }
 
     private val prefs by lazy { getSharedPreferences("admin_prefs", MODE_PRIVATE) }
@@ -73,6 +76,9 @@ class CodemagicCenterActivity : AppCompatActivity() {
     private var selectedAppName: String = ""
 
     private fun cmToken(): String = prefs.getString(PREFS_KEY_CM_TOKEN, "9OVMA35F09K3nv1djPFqSnQIQCKkq_b4_twyExdllp4")?.trim().orEmpty()
+    private fun ghToken(): String = prefs.getString(PREFS_KEY_GH_TOKEN, "")?.trim().orEmpty()
+    private fun ghOwner(): String = prefs.getString(PREFS_KEY_GH_OWNER, "iskande233")?.trim().orEmpty()
+    private fun ghRepo(): String = prefs.getString(PREFS_KEY_GH_REPO, "latchi-iptv-build")?.trim().orEmpty()
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguageManager.wrap(newBase))
@@ -119,11 +125,14 @@ class CodemagicCenterActivity : AppCompatActivity() {
         tools.addView(VipUiHelper.buildMiniButton(this, "🔐 CM Token", VipUiHelper.BtnVariant.NEON_PURPLE) {
             showTokenDialog()
         }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(6) })
-        tools.addView(VipUiHelper.buildMiniButton(this, "🔄 تحديث", VipUiHelper.BtnVariant.NEON_BLUE) {
-            loadDashboard()
+        tools.addView(VipUiHelper.buildMiniButton(this, "🐙 GitHub", VipUiHelper.BtnVariant.NEON_BLUE) {
+            showGitHubDialog()
         }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(6) })
         tools.addView(VipUiHelper.buildMiniButton(this, "🏗️ Build", VipUiHelper.BtnVariant.GOLD) {
             startBuildForSelected()
+        }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(6) })
+        tools.addView(VipUiHelper.buildMiniButton(this, "🔄 تحديث", VipUiHelper.BtnVariant.NEON_GREEN) {
+            loadDashboard()
         }, LinearLayout.LayoutParams(0, dp(46), 1f))
 
         // Status text
@@ -193,6 +202,82 @@ class CodemagicCenterActivity : AppCompatActivity() {
         runOnUiThread {
             progressOverlay.visibility = View.GONE
         }
+    }
+
+    private fun showGitHubDialog() {
+        val tokenInput = EditText(this).apply {
+            setText(ghToken())
+            hint = "GitHub Fine-grained Token"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setTextColor(Color.parseColor("#F2F4FF"))
+            setHintTextColor(Color.parseColor("#7A82A8"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+        }
+        val ownerInput = EditText(this).apply {
+            setText(ghOwner())
+            hint = "Repository Owner"
+            setSingleLine(true)
+            setTextColor(Color.parseColor("#F2F4FF"))
+            setHintTextColor(Color.parseColor("#7A82A8"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+        }
+        val repoInput = EditText(this).apply {
+            setText(ghRepo())
+            hint = "Repository Name"
+            setSingleLine(true)
+            setTextColor(Color.parseColor("#F2F4FF"))
+            setHintTextColor(Color.parseColor("#7A82A8"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(28), dp(24), dp(28), dp(22))
+            setBackgroundResource(R.drawable.bg_vip_overlay)
+        }
+        container.addView(TextView(this).apply {
+            text = "🐙 GitHub Releases"
+            setTextColor(Color.parseColor("#FFD700"))
+            textSize = 17f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        })
+        container.addView(TextView(this).apply {
+            text = "أدخل التوكن محليًا داخل هذا الهاتف فقط. يفضل أن يكون الريبو Public لتحديث المستخدمين مباشرة."
+            setTextColor(Color.parseColor("#B8C0E0"))
+            textSize = 12f
+            setPadding(0, dp(8), 0, dp(12))
+            gravity = Gravity.CENTER
+        })
+        listOf(tokenInput, ownerInput, repoInput).forEach { input ->
+            val card = VipUiHelper.buildCard(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            }
+            container.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
+        }
+        var dialogRef: AlertDialog? = null
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(VipUiHelper.buildMiniButton(this, "إلغاء", VipUiHelper.BtnVariant.NEON_PURPLE) {
+            dialogRef?.dismiss()
+        }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(6) })
+        row.addView(VipUiHelper.buildMiniButton(this, "حفظ", VipUiHelper.BtnVariant.GOLD) {
+            prefs.edit()
+                .putString(PREFS_KEY_GH_TOKEN, tokenInput.text.toString().trim())
+                .putString(PREFS_KEY_GH_OWNER, ownerInput.text.toString().trim())
+                .putString(PREFS_KEY_GH_REPO, repoInput.text.toString().trim())
+                .apply()
+            status("✅ تم حفظ إعدادات GitHub Releases")
+            dialogRef?.dismiss()
+        }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
+        container.addView(row)
+
+        dialogRef = AlertDialog.Builder(this).setView(container).create()
+        dialogRef?.show()
     }
 
     private fun showTokenDialog() {
@@ -617,6 +702,7 @@ class CodemagicCenterActivity : AppCompatActivity() {
                     .putString("downloaded_version", version)
                     .putString("downloaded_version_code", versionCode)
                     .putString("downloaded_apk_url", directUrl)
+                    .putString("downloaded_local_path", file.absolutePath)
                     .apply()
 
                 runOnUiThread {
@@ -668,14 +754,14 @@ class CodemagicCenterActivity : AppCompatActivity() {
             setBackgroundResource(R.drawable.bg_vip_overlay)
         }
         container.addView(TextView(this@CodemagicCenterActivity).apply {
-            text = "🚀 نشر الرابط للمستخدمين؟"
+            text = "🚀 نشر النسخة للمستخدمين؟"
             setTextColor(Color.parseColor("#FFD700"))
             textSize = 17f
             setTypeface(null, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
         })
         container.addView(TextView(this@CodemagicCenterActivity).apply {
-            text = "لن يتم تحميل الـ APK داخل لوحة التحكم.\nسيتم إرسال رابط Codemagic مباشرة.\n\nالنسخة: $finalVersion\nVersionCode: $finalVersionCode"
+            text = "يمكنك تحميل الـ APK للتجربة أولاً، أو رفعه مباشرة إلى GitHub Releases ثم إرساله للمستخدمين.\n\nالنسخة: $finalVersion\nVersionCode: $finalVersionCode"
             setTextColor(Color.parseColor("#F2F4FF"))
             textSize = 13f
             setPadding(0, dp(12), 0, 0)
@@ -706,19 +792,42 @@ class CodemagicCenterActivity : AppCompatActivity() {
     }
 
     private fun doPublish(buildId: String, version: String, versionCode: String, apkUrl: String) {
-        showProgress("⏳ جاري نشر التحديث...")
-        status("جاري نشر التحديث للمستخدمين...")
+        showProgress("⏳ جاري رفع النسخة إلى GitHub Releases ثم إرسالها للمستخدمين...")
+        status("جاري رفع النسخة إلى GitHub Releases...")
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val token = ghToken()
+                val owner = ghOwner()
+                val repo = ghRepo()
+                if (token.isBlank() || owner.isBlank() || repo.isBlank()) {
+                    throw IllegalStateException("أدخل GitHub token و Owner و Repo أولاً")
+                }
+
+                val localPath = prefs.getString("downloaded_local_path", "").orEmpty()
+                val localFile = localPath.takeIf { it.isNotBlank() }?.let { java.io.File(it) }?.takeIf { it.exists() }
+                    ?: downloadApkToTemp(apkUrl, version)
+
+                val tag = "v${version.ifBlank { versionCode }}"
+                val release = GitHubReleaseHelper.createOrGetRelease(
+                    token = token,
+                    owner = owner,
+                    repo = repo,
+                    tag = tag,
+                    releaseName = version,
+                    notes = "LATCHI IPTV $version"
+                )
+                val assetName = localFile.name.ifBlank { "app-release.apk" }
+                val publicApkUrl = GitHubReleaseHelper.uploadAsset(token, release, assetName, localFile)
+
                 val url = buildString {
                     append(GOOGLE_SCRIPT)
                     append("?action=set_app_update")
                     append("&secret=").append(enc(SECRET))
                     append("&version_code=").append(enc(versionCode))
                     append("&version_name=").append(enc(version))
-                    append("&apk_url=").append(enc(apkUrl))
+                    append("&apk_url=").append(enc(publicApkUrl))
                     append("&force_update=false")
-                    append("&notes_ar=").append(enc("تحديث جديد من LATCHI IPTV عبر لوحة التحكم الذكية."))
+                    append("&notes_ar=").append(enc("تحديث جديد من LATCHI IPTV عبر GitHub Releases."))
                 }
                 val txt = simpleGet(url)
                 val js = JSONObject(txt)
@@ -728,15 +837,17 @@ class CodemagicCenterActivity : AppCompatActivity() {
                     .putString("downloaded_build_id", buildId)
                     .putString("downloaded_version", version)
                     .putString("downloaded_version_code", versionCode)
-                    .putString("downloaded_apk_url", apkUrl)
+                    .putString("downloaded_apk_url", publicApkUrl)
+                    .putString("last_release_tag", tag)
+                    .putString("last_release_url", publicApkUrl)
                     .apply()
                 withContext(Dispatchers.Main) {
                     hideProgress()
-                    status("✅ تم نشر التحديث للمستخدمين")
+                    status("✅ تم رفع النسخة إلى GitHub Releases وإرسالها للمستخدمين")
                     VipUiHelper.showSuccessOverlay(
                         this@CodemagicCenterActivity,
                         title = "🚀 تم النشر بنجاح",
-                        message = "النسخة: $version\nVersionCode: $versionCode\nتم إخطار المستخدمين في تطبيق المشاهدة ✓",
+                        message = "النسخة: $version\nVersionCode: $versionCode\nRelease: $tag\nتم إرسال رابط GitHub Releases للمستخدمين ✓",
                         primaryText = "OK",
                         onPrimary = {}
                     )
@@ -750,6 +861,24 @@ class CodemagicCenterActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun downloadApkToTemp(apkUrl: String, version: String): java.io.File {
+        val safeVersion = version.ifBlank { "release" }.replace(Regex("[^A-Za-z0-9._-]"), "-")
+        val file = java.io.File(cacheDir, "upload-$safeVersion.apk")
+        val request = Request.Builder()
+            .url(apkUrl)
+            .header("x-auth-token", cmToken())
+            .header("Accept", "application/octet-stream")
+            .get()
+            .build()
+        val okClient = OkHttpClient.Builder().connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS).readTimeout(180, java.util.concurrent.TimeUnit.SECONDS).build()
+        okClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+            val body = response.body ?: throw IllegalStateException("Empty body")
+            file.outputStream().use { out -> body.byteStream().use { input -> input.copyTo(out) } }
+        }
+        return file
     }
 
     // ==================== HTTP HELPERS ====================
