@@ -65,7 +65,7 @@ class AppUpdateCenterActivity : AppCompatActivity() {
         root.addView(VipUiHelper.buildTopBar(
             this,
             title = "🚀 تحديث التطبيق",
-            subtitle = "App Update Center",
+            subtitle = "App Update Center • GitHub Releases",
             onBack = { finish() }
         ))
 
@@ -101,7 +101,7 @@ class AppUpdateCenterActivity : AppCompatActivity() {
         content.addView(publishRow)
 
         content.addView(VipUiHelper.buildPrimaryButton(
-            this, "🌐 نشر رابط APK خارجي", VipUiHelper.BtnVariant.NEON_BLUE
+            this, "🌐 نشر رابط APK مباشر (GitHub Releases)", VipUiHelper.BtnVariant.NEON_BLUE
         ) {
             showExternalApkPublishDialog()
         }, LinearLayout.LayoutParams(
@@ -131,7 +131,7 @@ class AppUpdateCenterActivity : AppCompatActivity() {
                 setTypeface(null, android.graphics.Typeface.BOLD)
             })
             addView(TextView(this@AppUpdateCenterActivity).apply {
-                text = "1) إذا كان عندك Build جاهز من Codemagic اضغط 'نشر آخر Build'.\n2) إذا كان عندك APK خارجي الصق رابطه واضغط نشر.\n3) السكريبت يبلّغ تطبيق المشاهدة مباشرة بوجود نسخة جديدة."
+                text = "1) ارفع النسخة النهائية كـ Release على GitHub.\n2) خذ رابط APK المباشر الذي ينتهي بـ app-release.apk أو .apk.\n3) الصق الرابط هنا وسيقوم تطبيق المشاهدة بسحبه مباشرة بدون Tokens أو Headers.\n4) خيار Codemagic يبقى متاحًا فقط إذا أردت حفظ Build داخليًا."
                 setTextColor(Color.parseColor("#B8C0E0"))
                 textSize = 12f
                 setPadding(0, dp(8), 0, 0)
@@ -266,14 +266,14 @@ class AppUpdateCenterActivity : AppCompatActivity() {
             setBackgroundResource(R.drawable.bg_vip_card)
         }
         container.addView(TextView(this).apply {
-            text = "🌐 نشر تحديث من رابط خارجي"
+            text = "🌐 نشر تحديث من GitHub Releases"
             setTextColor(Color.parseColor("#FFD700"))
             textSize = 18f
             setTypeface(null, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
         })
         container.addView(TextView(this).apply {
-            text = "ألصق رابط APK مباشر، ثم أدخل VersionCode أعلى من النسخة الحالية."
+            text = "ألصق رابط APK مباشر من GitHub Releases (عام وينتهي بـ .apk)، ثم أدخل VersionCode أعلى من النسخة الحالية."
             setTextColor(Color.parseColor("#C7B7D8"))
             textSize = 12f
             gravity = Gravity.CENTER
