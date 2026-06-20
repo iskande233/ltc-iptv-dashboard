@@ -78,7 +78,7 @@ class CodemagicCenterActivity : AppCompatActivity() {
     private fun cmToken(): String = prefs.getString(PREFS_KEY_CM_TOKEN, "9OVMA35F09K3nv1djPFqSnQIQCKkq_b4_twyExdllp4")?.trim().orEmpty()
     private fun ghToken(): String = prefs.getString(PREFS_KEY_GH_TOKEN, "")?.trim().orEmpty()
     private fun ghOwner(): String = prefs.getString(PREFS_KEY_GH_OWNER, "iskande233")?.trim().orEmpty()
-    private fun ghRepo(): String = prefs.getString(PREFS_KEY_GH_REPO, "latchi-iptv-build")?.trim().orEmpty()
+    private fun ghRepo(): String = prefs.getString(PREFS_KEY_GH_REPO, "latchi-iptv-updates")?.trim().orEmpty()
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguageManager.wrap(newBase))
