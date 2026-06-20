@@ -807,13 +807,22 @@ class CodemagicCenterActivity : AppCompatActivity() {
                 val localFile = localPath.takeIf { it.isNotBlank() }?.let { java.io.File(it) }?.takeIf { it.exists() }
                     ?: downloadApkToTemp(apkUrl, version)
 
-                val tag = "v${version.ifBlank { versionCode }}"
+                // 🛡️ ضمان monotonic versionCode (أكبر من أي شيء قبله)
+                val monotonic = VersionCodeHelper.computeMonotonicVersionCode(this@CodemagicCenterActivity)
+                val finalVersionCode = if (versionCode.toLongOrNull() != null &&
+                    versionCode.toLong() > monotonic.newVersionCode) {
+                    versionCode
+                } else {
+                    monotonic.newVersionCode.toString()
+                }
+
+                val tag = "v${finalVersionCode}"
                 val release = GitHubReleaseHelper.createOrGetRelease(
                     token = token,
                     owner = owner,
                     repo = repo,
                     tag = tag,
-                    releaseName = version,
+                    releaseName = version.ifBlank { "LATCHI IPTV $tag" },
                     notes = "LATCHI IPTV $version"
                 )
                 val assetName = localFile.name.ifBlank { "app-release.apk" }
@@ -823,8 +832,8 @@ class CodemagicCenterActivity : AppCompatActivity() {
                     append(GOOGLE_SCRIPT)
                     append("?action=set_app_update")
                     append("&secret=").append(enc(SECRET))
-                    append("&version_code=").append(enc(versionCode))
-                    append("&version_name=").append(enc(version))
+                    append("&version_code=").append(enc(finalVersionCode))
+                    append("&version_name=").append(enc(version.ifBlank { VersionCodeHelper.versionCodeToName(finalVersionCode.toLong()) }))
                     append("&apk_url=").append(enc(publicApkUrl))
                     append("&force_update=false")
                     append("&notes_ar=").append(enc("تحديث جديد من LATCHI IPTV عبر GitHub Releases."))
@@ -836,18 +845,19 @@ class CodemagicCenterActivity : AppCompatActivity() {
                     .putString("published_build_id", buildId)
                     .putString("downloaded_build_id", buildId)
                     .putString("downloaded_version", version)
-                    .putString("downloaded_version_code", versionCode)
+                    .putString("downloaded_version_code", finalVersionCode)
                     .putString("downloaded_apk_url", publicApkUrl)
                     .putString("last_release_tag", tag)
                     .putString("last_release_url", publicApkUrl)
+                    .putString("published_version_code", finalVersionCode)
                     .apply()
                 withContext(Dispatchers.Main) {
                     hideProgress()
-                    status("✅ تم رفع النسخة إلى GitHub Releases وإرسالها للمستخدمين")
+                    status("✅ تم رفع النسخة إلى GitHub Releases وإرسالها للمستخدمين\nVersionCode: $finalVersionCode (${monotonic.reason})")
                     VipUiHelper.showSuccessOverlay(
                         this@CodemagicCenterActivity,
                         title = "🚀 تم النشر بنجاح",
-                        message = "النسخة: $version\nVersionCode: $versionCode\nRelease: $tag\nتم إرسال رابط GitHub Releases للمستخدمين ✓",
+                        message = "النسخة: $version\nVersionCode: $finalVersionCode\nRelease: $tag\n\n🛡️ versionCode محسوب كـ: max(now, lastKnown+1)\n✅ مضمون ظهوره لكل المستخدمين",
                         primaryText = "OK",
                         onPrimary = {}
                     )

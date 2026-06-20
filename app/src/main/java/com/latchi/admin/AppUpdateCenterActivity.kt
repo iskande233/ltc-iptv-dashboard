@@ -226,10 +226,20 @@ class AppUpdateCenterActivity : AppCompatActivity() {
                     val json = runCatching { JSONObject(body) }.getOrNull()
                     val ok = res.isSuccessful && (json?.optBoolean("success", false) == true)
                     val revision = json?.optLong("server_revision", 0L) ?: 0L
+                    val appUpdateCode = json?.optLong("app_update_version_code", 0L) ?: 0L
+                    val appUpdateUrl = json?.optString("app_update_apk_url", "").orEmpty()
                     withContext(Dispatchers.Main) {
-                        serverStatusCard?.text = if (ok) "✅ متصل\nRev $revision" else "❌ خطأ ${res.code}"
+                        serverStatusCard?.text = if (ok) "✅ متصل\nRev $revision\nAppCode $appUpdateCode" else "❌ خطأ ${res.code}"
                         serverStatusCard?.setTextColor(if (ok) Color.parseColor("#39FF8B") else Color.parseColor("#FF5577"))
-                        statusText?.text = if (ok) "🌐 السكريبت جاهز للنشر والتحديث" else "⚠️ تعذر قراءة حالة السكريبت"
+                        statusText?.text = when {
+                            !ok -> "⚠️ تعذر قراءة حالة السكريبت"
+                            appUpdateUrl.isBlank() -> "🌐 السكريبت جاهز • لا يوجد تحديث منشور بعد"
+                            else -> "🌐 السكريبت جاهز للنشر\n📦 آخر VersionCode منشور: $appUpdateCode"
+                        }
+                        // 🛡️ حفظ آخر app_update_version_code في prefs لمعاينته لاحقاً
+                        if (ok) {
+                            prefs.edit().putLong("last_known_app_update_version_code", appUpdateCode).apply()
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -273,16 +283,15 @@ class AppUpdateCenterActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         })
         container.addView(TextView(this).apply {
-            text = "ألصق رابط APK مباشر من GitHub Releases (عام وينتهي بـ .apk)، ثم أدخل VersionCode أعلى من النسخة الحالية."
+            text = "ألصق رابط APK مباشر من GitHub Releases (عام وينتهي بـ .apk).\n🛡️ الـ VersionCode يُحسب تلقائياً ليكون أكبر من كل القيم السابقة — لا داعي لإدخاله يدوياً."
             setTextColor(Color.parseColor("#C7B7D8"))
             textSize = 12f
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(8))
         })
 
-        val urlInput = vipEditText("رابط APK مباشر", "https://.../app-release.apk", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        val versionInput = vipEditText("اسم النسخة", "1.1.4", InputType.TYPE_CLASS_TEXT)
-        val codeInput = vipEditText("VersionCode", "مثال: 1781557885", InputType.TYPE_CLASS_NUMBER)
+        val urlInput = vipEditText("رابط APK مباشر", "https://github.com/.../releases/download/v2.1/app-release.apk", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val versionInput = vipEditText("اسم النسخة", "مثال: LATCHI IPTV 2.1.0 (اختياري)", InputType.TYPE_CLASS_TEXT)
         val notesInput = vipEditText("ملاحظات التحديث", "تحديث جديد من LATCHI IPTV", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE)
         val forceCheck = CheckBox(this).apply {
             text = "تحديث إجباري"
@@ -294,7 +303,6 @@ class AppUpdateCenterActivity : AppCompatActivity() {
 
         container.addView(urlInput.first); container.addView(urlInput.second)
         container.addView(versionInput.first); container.addView(versionInput.second)
-        container.addView(codeInput.first); container.addView(codeInput.second)
         container.addView(notesInput.first); container.addView(notesInput.second)
         container.addView(forceCheck)
 
@@ -306,14 +314,14 @@ class AppUpdateCenterActivity : AppCompatActivity() {
         row.addView(VipUiHelper.buildMiniButton(this, "🚀 نشر", VipUiHelper.BtnVariant.GOLD) {
             val apkUrl = urlInput.second.text.toString().trim()
             val version = versionInput.second.text.toString().trim().ifBlank { "LATCHI IPTV Update" }
-            val versionCode = codeInput.second.text.toString().trim()
             val notes = notesInput.second.text.toString().trim().ifBlank { "تحديث جديد من LATCHI IPTV عبر رابط خارجي." }
-            if (apkUrl.isBlank() || !apkUrl.startsWith("http", ignoreCase = true) || versionCode.isBlank()) {
-                VipUiHelper.showErrorOverlay(this, "أدخل رابط APK صحيح و VersionCode.")
+            if (apkUrl.isBlank() || !apkUrl.startsWith("http", ignoreCase = true)) {
+                VipUiHelper.showErrorOverlay(this, "أدخل رابط APK صحيح يبدأ بـ http أو https.")
                 return@buildMiniButton
             }
             dialogRef?.dismiss()
-            publishExternalApkUpdate(apkUrl, version, versionCode, notes, forceCheck.isChecked)
+            // 🛡️ لا نمرر versionCode - يُحسب تلقائياً في publishExternalApkUpdate
+            publishExternalApkUpdate(apkUrl, version, "", notes, forceCheck.isChecked)
         }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
         container.addView(row)
 
@@ -339,14 +347,27 @@ class AppUpdateCenterActivity : AppCompatActivity() {
     }
 
     private fun publishExternalApkUpdate(apkUrl: String, version: String, versionCode: String, notes: String, forceUpdate: Boolean) {
-        statusText?.text = "⏳ جاري نشر رابط APK الخارجي..."
+        statusText?.text = "⏳ جاري حساب VersionCode..."
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // 🛡️ ضمان versionCode أكبر من كل القيم السابقة
+                val monotonic = VersionCodeHelper.computeMonotonicVersionCode(this@AppUpdateCenterActivity)
+                val finalVersionCode = if (versionCode.toLongOrNull() != null &&
+                    versionCode.toLong() > monotonic.newVersionCode) {
+                    versionCode
+                } else {
+                    monotonic.newVersionCode.toString()
+                }
+
+                withContext(Dispatchers.Main) {
+                    statusText?.text = "⏳ جاري نشر رابط APK الخارجي...\nVersionCode: $finalVersionCode (${monotonic.reason})"
+                }
+
                 val url = buildString {
                     append(GOOGLE_SCRIPT)
                     append("?action=set_app_update")
                     append("&secret=").append(enc(ADMIN_SECRET))
-                    append("&version_code=").append(enc(versionCode))
+                    append("&version_code=").append(enc(finalVersionCode))
                     append("&version_name=").append(enc(version))
                     append("&apk_url=").append(enc(apkUrl))
                     append("&force_update=").append(enc(forceUpdate.toString()))
@@ -362,15 +383,21 @@ class AppUpdateCenterActivity : AppCompatActivity() {
                     val publishTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
                     prefs.edit()
                         .putString("downloaded_apk_url", apkUrl)
-                        .putString("downloaded_version_code", versionCode)
+                        .putString("downloaded_version_code", finalVersionCode)
                         .putString("downloaded_version", version)
                         .putString("published_build_id", "external-url")
                         .putString("last_publish_time", publishTime)
+                        .putString("published_version_code", finalVersionCode)
                         .apply()
                     withContext(Dispatchers.Main) {
-                        statusText?.text = "✅ تم نشر الرابط الخارجي: $version"
+                        statusText?.text = "✅ تم نشر الرابط الخارجي: $version\nVersionCode: $finalVersionCode"
                         lastPublishCard?.text = "$version\n$publishTime"
-                        VipUiHelper.showSuccessOverlay(this@AppUpdateCenterActivity, "🌐 تم نشر الرابط الخارجي", "الإصدار: $version\nVersionCode: $versionCode", "حسناً", {})
+                        VipUiHelper.showSuccessOverlay(
+                            this@AppUpdateCenterActivity,
+                            "🌐 تم نشر الرابط الخارجي",
+                            "الإصدار: $version\nVersionCode: $finalVersionCode\nسيظهر التحديث لكل المستخدمين خلال ثوانٍ",
+                            "حسناً", {}
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -384,24 +411,39 @@ class AppUpdateCenterActivity : AppCompatActivity() {
 
     private fun publishLatestSavedBuildToUsers() {
         val apkUrl = prefs.getString("downloaded_apk_url", "").orEmpty().ifBlank { prefs.getString("last_success_apk_url", "").orEmpty() }
-        val versionCode = prefs.getString("downloaded_version_code", "").orEmpty().ifBlank { prefs.getString("last_success_version_code", "").orEmpty() }
+        val rawVersionCode = prefs.getString("downloaded_version_code", "").orEmpty().ifBlank { prefs.getString("last_success_version_code", "").orEmpty() }
         val version = prefs.getString("downloaded_version", "").orEmpty().ifBlank { prefs.getString("last_success_version", "").orEmpty() }.ifBlank { "LATCHI IPTV Update" }
 
-        if (apkUrl.isBlank() || versionCode.isBlank()) {
+        if (apkUrl.isBlank() || rawVersionCode.isBlank()) {
             VipUiHelper.showWarningOverlay(this, "⚠️ لا يوجد Build محفوظ", "افتح واجهة كود ماجيك أولاً ثم حمّل أو انشر Build جاهز.", "🧙 فتح كود ماجيك", {
                 startActivity(Intent(this, CodemagicCenterActivity::class.java))
             }, "إلغاء", {})
             return
         }
 
-        statusText?.text = "⏳ جاري نشر التحديث للمستخدمين..."
+        statusText?.text = "⏳ جاري حساب VersionCode..."
+        // 🛡️ ضمان versionCode أكبر من كل القيم السابقة (يحل مشكلة update_available=false)
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val monotonic = VersionCodeHelper.computeMonotonicVersionCode(this@AppUpdateCenterActivity)
+                val newVersionCode = monotonic.newVersionCode.toString()
+                // لو rawVersionCode من Codemagic أكبر من المحسوب → استخدمه (احترام Codemagic)
+                val finalVersionCode = if (rawVersionCode.toLongOrNull() != null &&
+                    rawVersionCode.toLong() > monotonic.newVersionCode) {
+                    rawVersionCode
+                } else {
+                    newVersionCode
+                }
+
+                withContext(Dispatchers.Main) {
+                    statusText?.text = "⏳ جاري نشر التحديث للمستخدمين...\nVersionCode: $finalVersionCode (${monotonic.reason})"
+                }
+
                 val url = buildString {
                     append(GOOGLE_SCRIPT)
                     append("?action=set_app_update")
                     append("&secret=").append(enc(ADMIN_SECRET))
-                    append("&version_code=").append(enc(versionCode))
+                    append("&version_code=").append(enc(finalVersionCode))
                     append("&version_name=").append(enc(version))
                     append("&apk_url=").append(enc(apkUrl))
                     append("&force_update=false")
@@ -415,11 +457,20 @@ class AppUpdateCenterActivity : AppCompatActivity() {
                         throw Exception(json.optString("message", body))
                     }
                     val publishTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-                    prefs.edit().putString("last_publish_time", publishTime).apply()
+                    prefs.edit()
+                        .putString("last_publish_time", publishTime)
+                        .putString("published_version_code", finalVersionCode)
+                        .putString("last_published_version_code", finalVersionCode)
+                        .apply()
                     withContext(Dispatchers.Main) {
-                        statusText?.text = "✅ تم نشر التحديث لكل المستخدمين: $version"
+                        statusText?.text = "✅ تم نشر التحديث لكل المستخدمين\nVersion: $version\nVersionCode: $finalVersionCode"
                         lastPublishCard?.text = "$version\n$publishTime"
-                        VipUiHelper.showSuccessOverlay(this@AppUpdateCenterActivity, "🚀 تم نشر التحديث", "الإصدار: $version\nالتاريخ: $publishTime", "حسناً", {})
+                        VipUiHelper.showSuccessOverlay(
+                            this@AppUpdateCenterActivity,
+                            "🚀 تم نشر التحديث",
+                            "الإصدار: $version\nVersionCode: $finalVersionCode\nالتاريخ: $publishTime\n\nسيظهر التحديث لكل المستخدمين خلال ثوانٍ",
+                            "حسناً", {}
+                        )
                     }
                 }
             } catch (e: Exception) {
