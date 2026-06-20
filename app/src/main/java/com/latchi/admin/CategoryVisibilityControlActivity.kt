@@ -51,8 +51,11 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     private lateinit var inputAlwanKeywords: EditText
     private lateinit var inputSourceName: EditText
     private lateinit var inputSourceUrl: EditText
+    private lateinit var btnTestNewSource: TextView  // 🛡️ جديد: فحص قبل الحفظ
     private lateinit var btnSaveSource: TextView
     private lateinit var btnTestSavedSources: TextView
+    private lateinit var inferredTypeText: TextView  // 🛡️ جديد: عرض النوع المكتشف
+    private lateinit var newSourceTestStatusText: TextView  // 🛡️ جديد: نتيجة الفحص
     private lateinit var currentPublishedSourceText: TextView
     private lateinit var selectedSourceActionsRow: LinearLayout
     private lateinit var selectedSourceTitleText: TextView
@@ -71,6 +74,10 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
     private lateinit var btnSaveAndApply: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
+
+    // 🛡️ حالة الفحص المحلي (قبل الحفظ)
+    private var lastNewSourceTestOk: Boolean = false
+    private var lastNewSourceTestMs: Long = 0L
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -115,8 +122,11 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         inputAlwanKeywords = findViewById(R.id.inputAlwanKeywords)
         inputSourceName = findViewById(R.id.inputSourceName)
         inputSourceUrl = findViewById(R.id.inputSourceUrl)
+        btnTestNewSource = findViewById(R.id.btnTestNewSource)
         btnSaveSource = findViewById(R.id.btnSaveSource)
         btnTestSavedSources = findViewById(R.id.btnTestSavedSources)
+        inferredTypeText = findViewById(R.id.inferredTypeText)
+        newSourceTestStatusText = findViewById(R.id.newSourceTestStatusText)
         currentPublishedSourceText = findViewById(R.id.currentPublishedSourceText)
         selectedSourceActionsRow = findViewById(R.id.selectedSourceActionsRow)
         selectedSourceTitleText = findViewById(R.id.selectedSourceTitleText)
@@ -139,6 +149,28 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         groupsRecyclerView.layoutManager = LinearLayoutManager(this)
         groupsAdapter = GroupsVisibilityAdapter(extractedGroups)
         groupsRecyclerView.adapter = groupsAdapter
+
+        // 🛡️ عرض النوع المكتشف أثناء الكتابة
+        inputSourceUrl.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                updateInferredTypePreview(s.toString())
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+
+    /**
+     * 🛡️ عرض النوع المكتشف أثناء الكتابة (auto-detect m3u / xtream / auto).
+     */
+    private fun updateInferredTypePreview(rawUrl: String) {
+        val detected = inferSourceType(rawUrl.trim())
+        val display = when (detected) {
+            "xtream" -> "🔍 النوع: XTREAM (Xtream Codes)"
+            "m3u" -> "🔍 النوع: M3U / M3U8 Playlist"
+            else -> "🔍 النوع: AUTO (سيتم تحديده عند الفحص)"
+        }
+        inferredTypeText?.text = display
     }
 
     private fun setupListeners() {
@@ -150,8 +182,12 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
 
         btnFetchMaster.setOnClickListener { fetchMasterUrl() }
         btnLoadCurrentConfig.setOnClickListener { loadCurrentRemoteConfig() }
+
+        // 🛡️ أزرار بنك المصادر (المُحدَّثة)
+        btnTestNewSource.setOnClickListener { testNewSourceBeforeSave() }
         btnSaveSource.setOnClickListener { saveCurrentSourceToBank() }
         btnTestSavedSources.setOnClickListener { testSavedSources() }
+
         btnRetestSelectedSource.setOnClickListener { selectedSource?.let { testSingleSavedSource(it) } }
         btnBroadcastSelectedSource.setOnClickListener { selectedSource?.let { executeDirectBroadcast(it) } }
 
@@ -178,6 +214,91 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         })
 
         btnSaveAndApply.setOnClickListener { saveAndApplyVisibilitySettings() }
+    }
+
+    /**
+     * 🛡️ فحص الرابط الجديد قبل الحفظ.
+     *
+     * - يتحقق من صيغة الرابط
+     * - يفحص الاستجابة (HTTP + content type)
+     * - يحفظ النتيجة في lastNewSourceTestOk/lastNewSourceTestMs
+     * - يعرض النتيجة في newSourceTestStatusText
+     * - يمكن الحفظ فقط بعد نجاح الفحص
+     */
+    private fun testNewSourceBeforeSave() {
+        val rawUrl = inputSourceUrl.text.toString().trim().replace("&amp;", "&")
+        val name = inputSourceName.text.toString().trim()
+
+        if (name.isBlank()) {
+            VipUiHelper.showErrorOverlay(this, "❌ اكتب اسم المصدر أولاً قبل الفحص")
+            return
+        }
+        if (rawUrl.isBlank()) {
+            VipUiHelper.showErrorOverlay(this, "❌ اكتب رابط المصدر أولاً قبل الفحص")
+            return
+        }
+        if (!isValidUrl(rawUrl)) {
+            VipUiHelper.showErrorOverlay(this, "❌ صيغة الرابط غير صحيحة. يجب أن يبدأ بـ http:// أو https://")
+            return
+        }
+
+        progressBar.visibility = View.VISIBLE
+        newSourceTestStatusText.text = "⏳ جاري الفحص..."
+        newSourceTestStatusText.setTextColor(Color.parseColor("#A5B4FC"))
+        statusText.text = "⏳ فحص ${name}..."
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val start = System.currentTimeMillis()
+            val source = SavedSource(
+                id = "src_pending_${System.currentTimeMillis()}",
+                name = name,
+                url = rawUrl,
+                type = inferSourceType(rawUrl)
+            )
+            val tested = testSource(source)
+            val ms = System.currentTimeMillis() - start
+
+            withContext(Dispatchers.Main) {
+                progressBar.visibility = View.GONE
+                lastNewSourceTestOk = tested.online
+                lastNewSourceTestMs = ms
+
+                if (tested.online) {
+                    newSourceTestStatusText.text = if (tested.expiry.isNotBlank()) {
+                        "✅ شغال • ${ms}ms • 📅 ${tested.expiry}"
+                    } else {
+                        "✅ شغال • ${ms}ms"
+                    }
+                    newSourceTestStatusText.setTextColor(Color.parseColor("#39FF8B"))
+                    statusText.text = "✅ فحص ${name} نجح! يمكنك الحفظ الآن."
+                    Toast.makeText(this@CategoryVisibilityControlActivity, "✅ السيرفر شغال، اضغط 💾 للحفظ", Toast.LENGTH_LONG).show()
+                } else {
+                    newSourceTestStatusText.text = "❌ فشل الفحص • ${ms}ms\n${tested.note}"
+                    newSourceTestStatusText.setTextColor(Color.parseColor("#FF5577"))
+                    statusText.text = "❌ ${name} متوقف أو الرابط غير صالح. يمكنك الحفظ يدوياً إذا أردت."
+                    VipUiHelper.showWarningOverlay(
+                        this@CategoryVisibilityControlActivity,
+                        title = "⚠️ الفحص فشل",
+                        message = "الرابط لا يستجيب أو لا يحتوي على قنوات صالحة:\n${tested.note}\n\nهل تريد حفظه رغم ذلك؟",
+                        primaryText = "💾 حفظ رغم ذلك",
+                        onPrimary = { saveCurrentSourceToBank(forceEvenIfDown = true) },
+                        secondaryText = "إلغاء",
+                        onSecondary = {}
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 🛡️ التحقق من صيغة الرابط.
+     */
+    private fun isValidUrl(url: String): Boolean {
+        val trimmed = url.trim()
+        if (trimmed.isBlank()) return false
+        return trimmed.startsWith("http://", ignoreCase = true) ||
+               trimmed.startsWith("https://", ignoreCase = true) ||
+               trimmed.startsWith("mac://", ignoreCase = true)
     }
 
     private fun apiUrl(): String =
@@ -354,24 +475,53 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveCurrentSourceToBank() {
+    private fun saveCurrentSourceToBank(forceEvenIfDown: Boolean = false) {
         val name = inputSourceName.text.toString().trim()
         val url = inputSourceUrl.text.toString().trim().replace("&amp;", "&")
         if (name.isBlank() || url.isBlank()) {
             VipUiHelper.showErrorOverlay(this, "❌ اكتب اسم المصدر والرابط أولاً")
             return
         }
+        if (!isValidUrl(url)) {
+            VipUiHelper.showErrorOverlay(this, "❌ صيغة الرابط غير صحيحة. يجب أن يبدأ بـ http:// أو https://")
+            return
+        }
+
+        // 🛡️ إذا لم يتم الفحص بعد → اقترح الفحص أولاً
+        if (!forceEvenIfDown && !lastNewSourceTestOk) {
+            VipUiHelper.showWarningOverlay(
+                this,
+                title = "⚠️ لم يتم فحص الرابط",
+                message = "لم تفحص هذا الرابط بعد. ننصحك بالضغط على 🔎 فحص قبل الحفظ أولاً للتأكد أنه شغال.\n\nهل تريد الحفظ دون فحص؟",
+                primaryText = "🔎 فحص أولاً",
+                onPrimary = { testNewSourceBeforeSave() },
+                secondaryText = "💾 حفظ دون فحص",
+                onSecondary = { saveCurrentSourceToBank(forceEvenIfDown = true) }
+            )
+            return
+        }
+
         val source = SavedSource(
             id = "src_${System.currentTimeMillis()}",
             name = name,
             url = url,
-            type = inferSourceType(url)
+            type = inferSourceType(url),
+            online = lastNewSourceTestOk,
+            responseMs = lastNewSourceTestMs,
+            lastCheckedAt = if (lastNewSourceTestOk) System.currentTimeMillis() else 0L
         )
         SourceBankPrefs.upsert(this, source)
         inputSourceName.setText("")
         inputSourceUrl.setText("")
+        // 🛡️ Reset حالة الفحص
+        lastNewSourceTestOk = false
+        lastNewSourceTestMs = 0L
+        newSourceTestStatusText.text = "⚡ لم يتم الفحص بعد"
+        newSourceTestStatusText.setTextColor(Color.parseColor("#8891B8"))
+        inferredTypeText.text = "🔍 النوع: —"
         loadSavedSources()
-        statusText.text = "✅ تم حفظ الرابط محلياً داخل الهاتف"
+        statusText.text = "✅ تم حفظ '${name}' محلياً داخل الهاتف"
+        Toast.makeText(this, "✅ تم الحفظ", Toast.LENGTH_SHORT).show()
     }
 
     private fun testSavedSources() {
