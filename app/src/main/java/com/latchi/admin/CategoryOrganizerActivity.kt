@@ -64,38 +64,49 @@ class CategoryOrganizerActivity : AppCompatActivity() {
             loadSavedSourcesAndShowList()
         } catch (e: Throwable) {
             android.util.Log.e("CategoryOrg", "onCreate crash", e)
-            // عرض خطأ بدلاً من الكراش
-            try {
-                val errorRoot = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
-                    setPadding(dp(40), dp(40), dp(40), dp(40))
-                }
-                errorRoot.addView(TextView(this).apply {
-                    text = "❌ خطأ في تحميل الواجهة"
-                    setTextColor(Color.parseColor("#FF5577"))
-                    textSize = 18f
-                    gravity = Gravity.CENTER
-                    setTypeface(null, android.graphics.Typeface.BOLD)
-                })
-                errorRoot.addView(TextView(this).apply {
-                    text = "الخطأ: ${e.javaClass.simpleName}\n${e.message?.take(200) ?: "غير معروف"}\n\nيرجى إعادة المحاولة أو التواصل مع الدعم."
-                    setTextColor(Color.parseColor("#B8C0E0"))
-                    textSize = 13f
-                    gravity = Gravity.CENTER
-                    setPadding(0, dp(16), 0, dp(16))
-                }
-                errorRoot.addView(VipUiHelper.buildMiniButton(this, "← العودة", VipUiHelper.BtnVariant.GOLD) {
-                    finish()
-                })
-                setContentView(errorRoot)
-            } catch (_: Exception) {
-                // last resort: just show toast and finish
-                Toast.makeText(this, "❌ خطأ: ${e.message}", Toast.LENGTH_LONG).show()
-                finish()
-            }
+            showCrashScreen(e)
         }
     }
+
+    /**
+     * عرض شاشة خطأ بدلاً من الكراش
+     */
+    private fun showCrashScreen(e: Throwable) {
+        try {
+            val errorRoot = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(40), dp(40), dp(40), dp(40))
+            }
+            val errorTitle = TextView(this)
+            errorTitle.text = "ERROR: Failed to load interface"
+            errorTitle.setTextColor(Color.parseColor("#FF5577"))
+            errorTitle.textSize = 18f
+            errorTitle.gravity = Gravity.CENTER
+            errorTitle.setTypeface(null, android.graphics.Typeface.BOLD)
+            errorRoot.addView(errorTitle)
+
+            val errorMsg = TextView(this)
+            val className = e.javaClass.simpleName
+            val errMsg = e.message?.take(200) ?: "Unknown error"
+            errorMsg.text = "Type: " + className + "\n" + errMsg
+            errorMsg.setTextColor(Color.parseColor("#B8C0E0"))
+            errorMsg.textSize = 13f
+            errorMsg.gravity = Gravity.CENTER
+            errorMsg.setPadding(0, dp(16), 0, dp(16))
+            errorRoot.addView(errorMsg)
+
+            errorRoot.addView(VipUiHelper.buildMiniButton(this, "Back", VipUiHelper.BtnVariant.GOLD) {
+                finish()
+            })
+            setContentView(errorRoot)
+        } catch (_: Exception) {
+            Toast.makeText(this, "App error", Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
+    private fun buildRoot()
 
     private fun buildRoot() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -687,7 +698,7 @@ class CategoryOrganizerActivity : AppCompatActivity() {
 
                     val namesJson = org.json.JSONObject(customNames as Map<*, *>).toString()
                     val orderJson = org.json.JSONArray(customOrder).toString()
-                    val urlHash = source.url.hashCode().toString().replace("-", "n")
+                    val urlHash = simpleHash_(source.url)
 
                     val url = buildString {
                         append(apiUrl)
@@ -742,4 +753,18 @@ class CategoryOrganizerActivity : AppCompatActivity() {
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    /**
+     * simpleHash_ — djb2 algorithm
+     * (source.url.hashCode() doesn't work in some contexts)
+     */
+    private fun simpleHash_(str: String): String {
+        var hash = 5381L
+        val s = String(str ?: "")
+        for (i in s.indices) {
+            hash = ((hash shl 5) + hash) + s[i].code
+            hash = hash and 0x7FFFFFFFFFFFFFFFL
+        }
+        return hash.toString().replace("-", "n")
+    }
 }
