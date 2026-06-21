@@ -106,8 +106,6 @@ class CategoryOrganizerActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildRoot()
-
     private fun buildRoot() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         setContentView(root)
@@ -760,7 +758,7 @@ class CategoryOrganizerActivity : AppCompatActivity() {
      */
     private fun simpleHash_(str: String): String {
         var hash = 5381L
-        val s = String(str ?: "")
+        val s = str ?: ""
         for (i in s.indices) {
             hash = ((hash shl 5) + hash) + s[i].code
             hash = hash and 0x7FFFFFFFFFFFFFFFL
