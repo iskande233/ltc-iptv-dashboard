@@ -646,7 +646,7 @@ class CategoryOrganizerActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveOverridesLocally() {
+    private fun saveOverridesLocally(returnToList: Boolean = true) {
         try {
             val source = currentSource ?: return
             val customNames = mutableMapOf<String, String>()
@@ -664,8 +664,9 @@ class CategoryOrganizerActivity : AppCompatActivity() {
             statusText?.text = "✅ تم حفظ ${customNames.size} تعديل محلياً في الهاتف"
             statusText?.setTextColor(Color.parseColor("#39FF8B"))
             Toast.makeText(this, "✅ تم الحفظ محلياً", Toast.LENGTH_SHORT).show()
-            // تحديث القائمة لإظهار حالة "مخصص"
-            loadSavedSourcesAndShowList()
+            // تحديث القائمة لإظهار حالة "مخصص" عند الحفظ المحلي فقط.
+            // أثناء النشر نبقى داخل شاشة الفئات حتى يظهر status النهائي للمستخدم.
+            if (returnToList) loadSavedSourcesAndShowList()
         } catch (e: Throwable) {
             android.util.Log.e("CategoryOrg", "saveOverridesLocally crash", e)
             Toast.makeText(this, "❌ خطأ في الحفظ: ${e.message}", Toast.LENGTH_LONG).show()
@@ -675,9 +676,9 @@ class CategoryOrganizerActivity : AppCompatActivity() {
     private fun publishOverridesToScript() {
         try {
             val source = currentSource ?: return
-            saveOverridesLocally()
+            saveOverridesLocally(returnToList = false)
 
-            statusText?.text = "⏳ جاري نشر التعديلات للمستخدمين..."
+            statusText?.text = "⏳ جاري نشر التعديلات للمستخدمين عبر action=save_category_overrides..."
             statusText?.setTextColor(Color.parseColor("#A5B4FC"))
 
             val customNames = mutableMapOf<String, String>()
@@ -702,6 +703,7 @@ class CategoryOrganizerActivity : AppCompatActivity() {
                         append(apiUrl)
                         append("?action=save_category_overrides")
                         append("&secret=").append(java.net.URLEncoder.encode("LatchiAdmin2026", "UTF-8"))
+                        append("&source_id=").append(java.net.URLEncoder.encode(source.id, "UTF-8"))
                         append("&source_url=").append(java.net.URLEncoder.encode(source.url, "UTF-8"))
                         append("&source_name=").append(java.net.URLEncoder.encode(source.name, "UTF-8"))
                         append("&custom_names=").append(java.net.URLEncoder.encode(namesJson, "UTF-8"))
@@ -715,7 +717,9 @@ class CategoryOrganizerActivity : AppCompatActivity() {
                         val json = org.json.JSONObject(body)
                         if (!json.optBoolean("success", false)) throw Exception(json.optString("message", body))
                         withContext(Dispatchers.Main) {
-                            statusText?.text = "✅ تم نشر ${customNames.size} تعديل + ترتيب ${customOrder.size} فئة للمستخدمين"
+                            val rev = json.optLong("server_revision", json.optLong("newRevision", 0L))
+                            statusText?.text = "✅ تم نشر ${customNames.size} تعديل + ترتيب ${customOrder.size} فئة للمستخدمين" +
+                                (if (rev > 0L) " • Revision: $rev" else "")
                             statusText?.setTextColor(Color.parseColor("#39FF8B"))
                             Toast.makeText(
                                 this@CategoryOrganizerActivity,
