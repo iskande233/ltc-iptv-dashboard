@@ -334,6 +334,20 @@ object VipUiHelper {
         }
 
         val dialog = AlertDialog.Builder(activity).setView(container).create()
+        // 🛡️ v5.2.1 Fix: dismiss dialog after button click
+        // before: callback only called onPrimary but dialog stayed open
+        if (primaryButton != null) {
+            primaryButton.setOnClickListener {
+                onPrimary?.invoke()
+                try { dialog.dismiss() } catch (_: Exception) {}
+            }
+        }
+        if (secondaryButton != null) {
+            secondaryButton.setOnClickListener {
+                onSecondary?.invoke()
+                try { dialog.dismiss() } catch (_: Exception) {}
+            }
+        }
         dialog.setOnShowListener {
             container.alpha = 0f
             container.scaleX = 0.92f
