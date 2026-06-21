@@ -403,13 +403,26 @@ class CategoryOrganizerActivity : AppCompatActivity() {
 
                         val countsMap = mutableMapOf<String, Int>()
                         val orderList = mutableListOf<String>()
+                        var pendingName = ""
+                        var pendingGroup = "Other"
                         body.lineSequence().forEach { line ->
                             val trimmed = line.trim()
-                            if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
-                                val group = Regex("group-title=\"([^\"]*)\"").find(trimmed)?.groupValues?.getOrNull(1) ?: "Other"
-                                val cleanGroup = group.ifBlank { "Other" }
-                                if (!countsMap.containsKey(cleanGroup)) orderList.add(cleanGroup)
-                                countsMap[cleanGroup] = countsMap.getOrDefault(cleanGroup, 0) + 1
+                            when {
+                                trimmed.startsWith("#EXTINF", ignoreCase = true) -> {
+                                    pendingName = trimmed.substringAfterLast(",", "").trim()
+                                    pendingGroup = Regex("group-title=\"([^\"]*)\"")
+                                        .find(trimmed)?.groupValues?.getOrNull(1)?.trim()?.ifBlank { "Other" } ?: "Other"
+                                }
+                                trimmed.isNotBlank() && !trimmed.startsWith("#") -> {
+                                    // منظم الفئات يجب أن يعرض Live TV فقط، لذلك لا نعدّ VOD/Movies/Series.
+                                    if (isLiveTvEntryForOrganizer(pendingGroup, pendingName, trimmed)) {
+                                        val cleanGroup = pendingGroup.ifBlank { "Other" }
+                                        if (!countsMap.containsKey(cleanGroup)) orderList.add(cleanGroup)
+                                        countsMap[cleanGroup] = countsMap.getOrDefault(cleanGroup, 0) + 1
+                                    }
+                                    pendingName = ""
+                                    pendingGroup = "Other"
+                                }
                             }
                         }
 
@@ -752,6 +765,17 @@ class CategoryOrganizerActivity : AppCompatActivity() {
         textSize = 15f
         setTypeface(null, android.graphics.Typeface.BOLD)
         setPadding(dp(4), dp(16), 0, dp(10))
+    }
+
+    /** Live-only filter for Category Organizer: يستبعد تلقائياً VOD/Movies/Series من M3U. */
+    private fun isLiveTvEntryForOrganizer(group: String, name: String, url: String): Boolean {
+        val text = "$group $name $url".lowercase()
+        val vodTokens = listOf(
+            "/movie/", "/vod/", "/series/", "movie/", "series/",
+            "movie", "movies", "vod", "film", "films", "cinema",
+            "series", "serie", "séries", "مسلسل", "مسلسلات", "افلام", "أفلام", "فيلم"
+        )
+        return vodTokens.none { text.contains(it) }
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
