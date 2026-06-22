@@ -41,6 +41,8 @@ class MasterLinkActivity : AppCompatActivity() {
 
     private lateinit var inputMasterUrl: EditText
     private lateinit var inputMasterExpiry: EditText
+    private lateinit var inputUserCode: EditText
+    private lateinit var inputUserPlaylistUrl: EditText
     private lateinit var txtLog: TextView
     private lateinit var progressOverlay: View
     private lateinit var progressStatus: TextView
@@ -181,7 +183,46 @@ class MasterLinkActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
-        content.addView(urlContainer, cardLp())
+        // ===== Per-user server override =====
+        content.addView(VipUiHelper.buildInputLabel(this, "👤 سيرفر خاص لمستخدم واحد (اختياري)"))
+        val userServerCard = VipUiHelper.buildCard(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        inputUserCode = EditText(this).apply {
+            hint = "كود المستخدم / User code"
+            setHintTextColor(Color.parseColor("#7A82A8"))
+            setTextColor(Color.parseColor("#F2F4FF"))
+            setSingleLine(true)
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+        }
+        inputUserPlaylistUrl = EditText(this).apply {
+            hint = "رابط خاص لهذا المستخدم فقط"
+            setHintTextColor(Color.parseColor("#7A82A8"))
+            setTextColor(Color.parseColor("#F2F4FF"))
+            setSingleLine(false)
+            minLines = 2
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+        }
+        userServerCard.addView(inputUserCode, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        userServerCard.addView(inputUserPlaylistUrl, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        val userRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0) }
+        userRow.addView(VipUiHelper.buildMiniButton(this, "📋 لصق الرابط", VipUiHelper.BtnVariant.NEON_BLUE) {
+            VipUiHelper.pasteFromClipboard(this@MasterLinkActivity) { txt -> inputUserPlaylistUrl.setText(txt) }
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        userRow.addView(VipUiHelper.buildMiniButton(this, "💾 حفظ للمستخدم", VipUiHelper.BtnVariant.NEON_GREEN) {
+            submitUserSpecificServer()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(6) })
+        userServerCard.addView(userRow)
+        userServerCard.addView(TextView(this).apply {
+            text = "ملاحظة: التعميم أعلاه يطبق على الجميع. هذا القسم يغير رابط مستخدم واحد فقط ويبقى رابط خاص به."
+            setTextColor(Color.parseColor("#B8C0E0"))
+            textSize = 11f
+            setPadding(0, dp(8), 0, 0)
+        })
+        content.addView(userServerCard, cardLp())
 
         // ===== Link expiry =====
         content.addView(VipUiHelper.buildInputLabel(this, "⏳ تاريخ نهاية الرابط (اختياري)"))
@@ -297,6 +338,46 @@ class MasterLinkActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT
         ))
         progressOverlay = overlay
+    }
+
+    private fun submitUserSpecificServer() {
+        val code = inputUserCode.text.toString().trim()
+        val playlist = inputUserPlaylistUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
+        if (code.isBlank() || playlist.isBlank()) {
+            VipUiHelper.showErrorOverlay(this, "أدخل كود المستخدم والرابط الخاص به أولاً.")
+            return
+        }
+        showProgress("جاري حفظ السيرفر الخاص للمستخدم $code...")
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
+                val url = buildString {
+                    append(apiUrl)
+                    append("?action=edit_user")
+                    append("&secret=").append(URLEncoder.encode(SECRET, "UTF-8"))
+                    append("&code=").append(URLEncoder.encode(code, "UTF-8"))
+                    append("&playlist_url=").append(URLEncoder.encode(playlist, "UTF-8"))
+                }
+                val res = URL(url).openConnection() as HttpURLConnection
+                res.requestMethod = "GET"; res.connectTimeout = 15000; res.readTimeout = 25000
+                val body = res.inputStream.bufferedReader().readText()
+                val json = JSONObject(body)
+                val success = json.optBoolean("success", false)
+                withContext(Dispatchers.Main) {
+                    hideProgress()
+                    if (success) {
+                        appendLog("✅ تم حفظ سيرفر خاص للمستخدم $code")
+                        VipUiHelper.showSuccessOverlay(this@MasterLinkActivity, "✅ تم الحفظ", "تم حفظ الرابط الخاص لهذا المستخدم فقط. سيصله التغيير عند المزامنة.", "حسناً", {})
+                    } else {
+                        VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الحفظ:
+${json.optString("message", body)}")
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { hideProgress(); VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الاتصال:
+${e.localizedMessage}") }
+            }
+        }
     }
 
     private fun submitMasterUrl() {
