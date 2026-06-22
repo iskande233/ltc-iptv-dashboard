@@ -7,6 +7,7 @@ import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
+import android.util.JsonReader
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -20,6 +21,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.net.URI
+import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 /**
@@ -47,6 +50,7 @@ class CategoryOrganizerActivity : AppCompatActivity() {
     private var currentSource: SavedSource? = null
     private var currentCategories: MutableList<CategoryOverridesPrefs.CategoryOverride> = mutableListOf()
     private var currentChannelCounts: Map<String, Int> = emptyMap()
+    private var hiddenCategories: MutableSet<String> = mutableSetOf()
     private var statusText: TextView? = null
 
     private val savedSourcesList = mutableListOf<SavedSource>()
@@ -382,7 +386,25 @@ class CategoryOrganizerActivity : AppCompatActivity() {
 
             CoroutineScope(Dispatchers.IO).launch {
                 try {
+                    hiddenCategories = fetchRemoteHiddenCategories()
                     var realUrl = source.url.replace("&amp;", "&")
+
+                    val xtreamCats = if (isXtreamUrl(realUrl)) fetchXtreamLiveCategoriesFast(realUrl) else emptyList()
+                    if (xtreamCats.isNotEmpty()) {
+                        currentChannelCounts = xtreamCats.associate { it.first to it.second }
+                        currentCategories.clear()
+                        xtreamCats.map { it.first }.forEachIndexed { index, original ->
+                            val customName = existingOverrides?.customNames?.get(original) ?: original
+                            currentCategories.add(CategoryOverridesPrefs.CategoryOverride(original, customName, index))
+                        }
+                        withContext(Dispatchers.Main) {
+                            statusText?.text = "✅ تم جلب ${currentCategories.size} فئة Live بسرعة عبر Xtream API"
+                            statusText?.setTextColor(Color.parseColor("#39FF8B"))
+                            renderCategoriesList()
+                        }
+                        return@launch
+                    }
+
                     if (realUrl.contains("get.php") && !realUrl.contains("type=m3u_plus")) {
                         realUrl = if (realUrl.contains("type=m3u"))
                             realUrl.replace("type=m3u", "type=m3u_plus")
@@ -620,6 +642,23 @@ class CategoryOrganizerActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
 
+        val visibilityBtn = TextView(this).apply {
+            val hidden = hiddenCategories.any { it.equals(override.originalName, ignoreCase = true) }
+            text = if (hidden) "🔴 مخفية" else "🟢 ظاهرة"
+            setTextColor(if (hidden) Color.parseColor("#FF5577") else Color.parseColor("#39FF8B"))
+            textSize = 11f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(dp(8), dp(3), dp(8), dp(3))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val existing = hiddenCategories.firstOrNull { it.equals(override.originalName, ignoreCase = true) }
+                if (existing != null) hiddenCategories.remove(existing) else hiddenCategories.add(override.originalName)
+                renderCategoriesList()
+            }
+        }
+        row3.addView(visibilityBtn)
+
         val resetBtn = TextView(this).apply {
             text = if (override.originalName == override.customName) "—" else "↺ إعادة للاسم الأصلي"
             setTextColor(if (override.originalName == override.customName)
@@ -723,6 +762,16 @@ class CategoryOrganizerActivity : AppCompatActivity() {
                         append("&custom_order=").append(java.net.URLEncoder.encode(orderJson, "UTF-8"))
                         append("&url_hash=").append(java.net.URLEncoder.encode(urlHash, "UTF-8"))
                     }
+                    // حفظ إخفاء/إظهار الفئات أولاً حتى يطبّق فوراً على المستخدمين.
+                    val hiddenCsv = hiddenCategories.joinToString(",")
+                    val viewUrl = buildString {
+                        append(apiUrl)
+                        append("?action=save_view_config")
+                        append("&secret=").append(java.net.URLEncoder.encode("LatchiAdmin2026", "UTF-8"))
+                        append("&hidden_categories=").append(java.net.URLEncoder.encode(hiddenCsv, "UTF-8"))
+                    }
+                    client.newCall(Request.Builder().url(viewUrl).get().build()).execute().close()
+
                     val req = Request.Builder().url(url).get().build()
                     client.newCall(req).execute().use { res ->
                         val body = res.body?.string().orEmpty()
@@ -757,6 +806,62 @@ class CategoryOrganizerActivity : AppCompatActivity() {
             android.util.Log.e("CategoryOrg", "publishOverridesToScript crash", e)
             Toast.makeText(this, "❌ خطأ: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun isXtreamUrl(url: String): Boolean = url.contains("get.php", ignoreCase = true) && url.contains("username=", true) && url.contains("password=", true)
+
+    private fun fetchXtreamLiveCategoriesFast(sourceUrl: String): List<Pair<String, Int>> {
+        return try {
+            val clean = sourceUrl.replace("&amp;", "&")
+            val uri = URI(clean)
+            val server = "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}"
+            val params = (uri.rawQuery ?: "").split("&").mapNotNull {
+                val p = it.split("=", limit = 2)
+                if (p.size == 2) URLDecoder.decode(p[0], "UTF-8") to URLDecoder.decode(p[1], "UTF-8") else null
+            }.toMap()
+            val u = params["username"] ?: return emptyList()
+            val pass = params["password"] ?: return emptyList()
+            val url = "$server/player_api.php?username=${java.net.URLEncoder.encode(u, "UTF-8")}&password=${java.net.URLEncoder.encode(pass, "UTF-8")}&action=get_live_categories"
+            val req = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Linux; Android)").get().build()
+            client.newCall(req).execute().use { res ->
+                if (!res.isSuccessful) return emptyList()
+                val stream = res.body?.byteStream() ?: return emptyList()
+                val out = mutableListOf<Pair<String, Int>>()
+                JsonReader(stream.bufferedReader(Charsets.UTF_8)).use { r ->
+                    r.beginArray()
+                    while (r.hasNext()) {
+                        var name = ""
+                        var count = -1
+                        r.beginObject()
+                        while (r.hasNext()) {
+                            when (r.nextName()) {
+                                "category_name" -> name = readJsonStringSafe(r)
+                                "count", "category_count" -> count = readJsonStringSafe(r).toIntOrNull() ?: -1
+                                else -> r.skipValue()
+                            }
+                        }
+                        r.endObject()
+                        if (name.isNotBlank()) out.add(name.trim() to count)
+                    }
+                    r.endArray()
+                }
+                out
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun readJsonStringSafe(r: JsonReader): String {
+        return try { r.nextString() } catch (_: Exception) { try { r.nextInt().toString() } catch (_: Exception) { r.skipValue(); "" } }
+    }
+
+    private fun fetchRemoteHiddenCategories(): MutableSet<String> {
+        return try {
+            val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE)
+                .getString("apiUrl", "https://script.google.com/macros/s/AKfycbxThygspXN6eB8cDUfY7XavKmhXZfewEUfQqd3vARScZ5y7adterInsbXshNkgPgfiF/exec") ?: ""
+            val body = client.newCall(Request.Builder().url("$apiUrl?action=get_view_config").get().build()).execute().use { it.body?.string().orEmpty() }
+            val hidden = org.json.JSONObject(body).optString("hidden_categories", "")
+            hidden.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+        } catch (_: Exception) { mutableSetOf() }
     }
 
     private fun sectionTitle(t: String): TextView = TextView(this).apply {
