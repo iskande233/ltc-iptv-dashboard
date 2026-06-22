@@ -369,13 +369,11 @@ class MasterLinkActivity : AppCompatActivity() {
                         appendLog("✅ تم حفظ سيرفر خاص للمستخدم $code")
                         VipUiHelper.showSuccessOverlay(this@MasterLinkActivity, "✅ تم الحفظ", "تم حفظ الرابط الخاص لهذا المستخدم فقط. سيصله التغيير عند المزامنة.", "حسناً", {})
                     } else {
-                        VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الحفظ:
-${json.optString("message", body)}")
+                        VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الحفظ:\n${json.optString("message", body)}")
                     }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) { hideProgress(); VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الاتصال:
-${e.localizedMessage}") }
+                withContext(Dispatchers.Main) { hideProgress(); VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الاتصال:\n${e.localizedMessage}") }
             }
         }
     }
