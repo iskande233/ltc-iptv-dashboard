@@ -215,6 +215,81 @@ class AdminActivity : AppCompatActivity() {
         findViewById<TextView?>(R.id.btnXtreamTester)?.setOnClickListener {
             startActivity(Intent(this, XtreamTesterActivity::class.java))
         }
+
+        // ── زر Free/VIP Mode ──────────────────────────────────────────
+        val btnToggleMode = findViewById<TextView?>(R.id.btnToggleAppMode)
+        updateAppModeButton(btnToggleMode)
+        btnToggleMode?.setOnClickListener {
+            toggleAppMode(btnToggleMode)
+        }
+    }
+
+    private fun updateAppModeButton(btn: TextView?) {
+        val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE)
+            .getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val res = java.net.URL("$apiUrl?action=get_config").readText()
+                val json = org.json.JSONObject(res)
+                val mode = json.optString("app_mode", "free")
+                runOnUiThread {
+                    if (mode == "vip") {
+                        btn?.text = "🔐 VIP MODE — اضغط للتبديل إلى FREE"
+                        btn?.setBackgroundResource(R.drawable.bg_btn_gold)
+                        btn?.setTextColor(android.graphics.Color.BLACK)
+                    } else {
+                        btn?.text = "🔓 FREE MODE — اضغط للتبديل إلى VIP"
+                        btn?.setBackgroundResource(R.drawable.bg_purple_panel)
+                        btn?.setTextColor(android.graphics.Color.WHITE)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun toggleAppMode(btn: TextView?) {
+        val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE)
+            .getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
+        val currentText = btn?.text?.toString() ?: ""
+        val newMode = if (currentText.contains("FREE")) "vip" else "free"
+
+        VipUiHelper.showSuccessOverlay(
+            this,
+            title = if (newMode == "vip") "🔐 تفعيل VIP MODE" else "🔓 تفعيل FREE MODE",
+            message = if (newMode == "vip")
+                "سيطلب التطبيق كود تفعيل من المستخدمين الجدد"
+            else
+                "سيدخل المستخدمون مباشرة بدون كود",
+            primaryText = "✅ تأكيد",
+            onPrimary = {
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        val url = java.net.URL(apiUrl)
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.setRequestProperty("Content-Type", "application/json")
+                        conn.doOutput = true
+                        val body = """{"action":"toggle_app_mode","password":"iskander_khantouche_2026","mode":"$newMode"}"""
+                        conn.outputStream.write(body.toByteArray())
+                        conn.responseCode
+                        runOnUiThread {
+                            updateAppModeButton(btn)
+                            android.widget.Toast.makeText(
+                                this@AdminActivity,
+                                if (newMode == "vip") "✅ تم التفعيل — VIP MODE" else "✅ تم التفعيل — FREE MODE",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } catch (e: Exception) {
+                        runOnUiThread {
+                            android.widget.Toast.makeText(this@AdminActivity, "❌ ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            },
+            secondaryText = "إلغاء",
+            onSecondary = {}
+        )
     }
 
     private fun scrollToView(view: View) {
