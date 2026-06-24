@@ -1,0 +1,235 @@
+/**
+ * LATCHI IPTV BACKEND ENGINE — v7.2 HYBRID FINAL
+ * يدعم النظام الجديد Free/VIP + يحافظ على توافق التطبيقات ولوحة التحكم القديمة.
+ * Storage: Script Properties فقط.
+ */
+
+const ADMIN_PASSWORD = 'iskander_khantouche_2026';
+const LEGACY_SECRET  = 'LatchiAdmin2026';
+const CONFIG_KEY     = 'LATCHI_CONFIG_v7';
+const CODES_KEY      = 'LATCHI_VIP_CODES_v7';
+const SESSIONS_KEY   = 'LATCHI_SESSIONS_v7';
+
+function getDefaultConfig_() {
+  return {
+    master_url: '',
+    server_revision: 1,
+    app_mode: 'free', // free | vip
+    category_overrides: {}, // { originalName: {name, order} }
+    hidden_categories: [],
+    app_version_code: 1,
+    app_version_name: '1.0',
+    apk_download_url: '',
+    pc_download_url: '',
+    force_update: false,
+    update_notes_ar: 'تحديث جديد متوفر لتطبيق LATCHI IPTV',
+    wallpapers: [],
+    wallpaper_interval_min: 5,
+    auto_bot_enabled: false,
+    bot_last_playlist_url: '',
+    bot_last_channel_count: 0,
+    bot_last_run: ''
+  };
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+function ok_(obj) { return json_(Object.assign({status:'success', success:true}, obj || {})); }
+function err_(msg, code) { return json_({status:'error', success:false, code:code||400, message:String(msg||'error')}); }
+
+function getConfig_() {
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty(CONFIG_KEY);
+  if (!raw) {
+    const def = getDefaultConfig_();
+    props.setProperty(CONFIG_KEY, JSON.stringify(def));
+    return def;
+  }
+  try { return Object.assign({}, getDefaultConfig_(), JSON.parse(raw)); }
+  catch(e) { const def=getDefaultConfig_(); props.setProperty(CONFIG_KEY, JSON.stringify(def)); return def; }
+}
+function saveConfig_(c) { PropertiesService.getScriptProperties().setProperty(CONFIG_KEY, JSON.stringify(c)); }
+function bumpRevision_(c) { c.server_revision = (Number(c.server_revision)||1)+1; return c.server_revision; }
+
+function getVipCodes_() {
+  const raw = PropertiesService.getScriptProperties().getProperty(CODES_KEY);
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch(e) { return {}; }
+}
+function saveVipCodes_(codes) { PropertiesService.getScriptProperties().setProperty(CODES_KEY, JSON.stringify(codes||{})); }
+function getSessions_() {
+  const raw = PropertiesService.getScriptProperties().getProperty(SESSIONS_KEY);
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch(e) { return {}; }
+}
+function saveSessions_(s) { PropertiesService.getScriptProperties().setProperty(SESSIONS_KEY, JSON.stringify(s||{})); }
+
+function isAdmin_(p) {
+  return String(p.password||'') === ADMIN_PASSWORD || String(p.secret||'') === LEGACY_SECRET;
+}
+function readBody_(e) {
+  if (e && e.postData && e.postData.contents) {
+    try { return JSON.parse(e.postData.contents); } catch(_) {}
+  }
+  return (e && e.parameter) ? e.parameter : {};
+}
+
+function doGet(e) {
+  try {
+    const p = (e && e.parameter) ? e.parameter : {};
+    const action = String(p.action || '').trim();
+    // توافق Android القديم: بدون action لكن فيه code/device_id
+    if (!action && p.code) return handleVerifyCode_(p, true);
+    switch(action) {
+      case 'get_config': return ok_(getPublicConfig_());
+      case 'get_master_config': return handleGetMasterConfig_();
+      case 'get_live_master_state': return handleGetLiveMasterState_();
+      case 'verify_code': return handleVerifyCode_(p, false);
+      case 'validate_code': return handleVerifyCode_(p, true);
+      case 'get_categories': return handleGetCategories_(p);
+      case 'get_app_update': case 'check_app_update': return handleGetAppUpdate_(p);
+      case 'ping': return handlePing_(p);
+      case 'get_sessions': return handleGetSessions_(p);
+      case 'inspect_source': return handleInspectSource_(p);
+      // توافق لوحة التحكم القديمة عبر GET + secret
+      case 'update_master_url': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminUpdateMasterUrl_(p.master_url || p.playlist_url || p.url || '');
+      case 'toggle_app_mode': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminToggleAppMode_(p.mode || 'free');
+      case 'force_revision': case 'increment_server_revision': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminForceRevision_();
+      case 'set_app_update': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminSetAppUpdate_(p);
+      case 'save_category_overrides': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminSaveCategoryOverrides_(legacyOverridesFromParams_(p));
+      case 'save_view_config': case 'set_hidden_categories': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminSetHiddenCategories_(parseHidden_(p.hidden_categories || p.hidden || ''));
+      case 'add_code': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminAddVipCode_(p);
+      case 'edit_user': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminEditVipCode_(p);
+      case 'delete_user': case 'delete_vip_code': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminDeleteVipCode_(p.code);
+      case 'get_vip_codes': case 'get_all_users': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminGetVipCodes_();
+      case 'clear_vip_codes': case 'delete_all_users': if (!isAdmin_(p)) return err_('Unauthorized',403); return adminClearVipCodes_();
+      default: return err_('Unknown action: '+action);
+    }
+  } catch(ex) { return err_(ex.toString()); }
+}
+
+function doPost(e) {
+  try {
+    const body = readBody_(e);
+    if (!isAdmin_(body)) return err_('Unauthorized: wrong password',403);
+    const action = String(body.action || '').trim();
+    switch(action) {
+      case 'update_master_url': return adminUpdateMasterUrl_(body.master_url || body.playlist_url || body.url || '');
+      case 'toggle_app_mode': return adminToggleAppMode_(body.mode);
+      case 'force_revision': case 'increment_server_revision': return adminForceRevision_();
+      case 'set_app_update': return adminSetAppUpdate_(body);
+      case 'add_vip_code': case 'add_code': return adminAddVipCode_(body);
+      case 'edit_user': return adminEditVipCode_(body);
+      case 'delete_vip_code': case 'delete_user': return adminDeleteVipCode_(body.code);
+      case 'get_vip_codes': case 'get_all_users': return adminGetVipCodes_();
+      case 'clear_vip_codes': case 'delete_all_users': return adminClearVipCodes_();
+      case 'save_category_overrides': return adminSaveCategoryOverrides_(body.overrides || legacyOverridesFromParams_(body));
+      case 'set_hidden_categories': case 'save_view_config': return adminSetHiddenCategories_(Array.isArray(body.hidden) ? body.hidden : parseHidden_(body.hidden_categories || body.hidden || ''));
+      case 'set_wallpapers': return adminSetWallpapers_(body.wallpapers, body.interval_min);
+      case 'clear_sessions': return adminClearSessions_();
+      default: return err_('Unknown admin action: '+action);
+    }
+  } catch(ex) { return err_(ex.toString()); }
+}
+
+function getPublicConfig_() {
+  const c=getConfig_();
+  return { app_mode:c.app_mode, server_revision:c.server_revision, master_url:c.master_url, playlist_url:c.master_url, wallpapers:c.wallpapers||[], wallpaper_interval_min:c.wallpaper_interval_min||5 };
+}
+function handleGetMasterConfig_() { return ok_(getPublicConfig_()); }
+function handleGetLiveMasterState_() {
+  const c=getConfig_();
+  return ok_({
+    server_revision:c.server_revision, app_mode:c.app_mode,
+    master_url:c.master_url, playlist_url:c.master_url,
+    default_playlist_url:c.master_url, masterUrl:c.master_url,
+    hidden_categories:(c.hidden_categories||[]).join(','),
+    wallpapers:c.wallpapers||[], wallpaper_interval_min:c.wallpaper_interval_min||5,
+    app_update_version_code:c.app_version_code, app_update_version_name:c.app_version_name,
+    app_update_apk_url:c.apk_download_url, app_update_force:!!c.force_update,
+    app_update_notes_ar:c.update_notes_ar
+  });
+}
+
+function handleVerifyCode_(p, androidCompat) {
+  const code=String(p.code||'').trim().toUpperCase();
+  if (!code) return androidCompat ? ok_({success:false, message:'الكود فارغ'}) : ok_({valid:false, message:'الكود فارغ'});
+  const c=getConfig_(); const codes=getVipCodes_(); const entry=codes[code];
+  let valid=!!entry && !entry.disabled;
+  if (valid && entry.expires_at) { const t=new Date(entry.expires_at).getTime(); if (!isNaN(t) && Date.now()>t) valid=false; }
+  if (!valid) return androidCompat ? ok_({success:false, message:'كود غير صحيح أو منتهي'}) : ok_({valid:false, message:'كود غير صحيح أو منتهي'});
+  const deviceId=String(p.device_id||p.device||'').trim();
+  if (deviceId) { entry.devices=entry.devices||[]; if (!entry.devices.includes(deviceId)) entry.devices.push(deviceId); codes[code]=entry; saveVipCodes_(codes); }
+  const url = entry.playlist_url || c.master_url;
+  const payload={
+    valid:true, success:true, message:'تم التحقق بنجاح ✅', code, name:entry.name||'مستخدم VIP', expires_at:entry.expires_at||'',
+    playlist_url:url, master_url:url, m3u_url:url, server_revision:c.server_revision,
+    app_mode:c.app_mode, wallpapers:c.wallpapers||[], wallpaper_interval_min:c.wallpaper_interval_min||5
+  };
+  return ok_(payload);
+}
+
+function handleGetCategories_(p) {
+  const c=getConfig_(); if (!c.master_url) return ok_({status:'error', message:'master_url not set', channels:[], categories:[], server_revision:c.server_revision});
+  try {
+    const res=UrlFetchApp.fetch(c.master_url,{method:'get',muteHttpExceptions:true,followRedirects:true,headers:{'User-Agent':'Mozilla/5.0 (LATCHI IPTV)'}});
+    if (res.getResponseCode()!==200) return ok_({status:'error', message:'HTTP '+res.getResponseCode(), channels:[], categories:[], server_revision:c.server_revision});
+    const parsed=parseM3U_(res.getContentText('UTF-8'));
+    const hidden=(c.hidden_categories||[]).map(x=>String(x).toLowerCase());
+    const overrides=c.category_overrides||{};
+    const channels=parsed.filter(ch=>!hidden.some(h=>String(ch.group||'').toLowerCase().includes(h))).map(ch=>({
+      name:ch.name, url:ch.url, streamUrl:ch.url, logo:ch.logo, logoUrl:ch.logo,
+      group:(overrides[ch.group]||{}).name||ch.group, category:(overrides[ch.group]||{}).name||ch.group, group_orig:ch.group, contentType:detectType_(ch)
+    }));
+    const catMap={}; channels.forEach(ch=>{catMap[ch.group]=(catMap[ch.group]||0)+1;});
+    const categories=Object.entries(catMap).map(([name,count])=>({name,count,order:(overrides[name]||{}).order||999})).sort((a,b)=>a.order-b.order);
+    return ok_({server_revision:c.server_revision, app_mode:c.app_mode, channels, categories, total:channels.length, wallpapers:c.wallpapers||[], wallpaper_interval_min:c.wallpaper_interval_min||5});
+  } catch(ex) { return ok_({status:'error', message:ex.toString(), channels:[], categories:[], server_revision:c.server_revision}); }
+}
+
+function handleGetAppUpdate_(p) {
+  const c=getConfig_(); const cur=parseInt(p.version_code||'0',10)||0; const isPC=String(p.platform||'').toLowerCase()==='pc';
+  const url=isPC ? (c.pc_download_url||'') : (c.apk_download_url||''); const latest=parseInt(c.app_version_code||1,10);
+  return ok_({
+    update_available: latest>cur && !!url,
+    version_code: latest, versionCode: latest,
+    version_name: c.app_version_name, versionName: c.app_version_name,
+    apk_url: url, apkUrl: url, url,
+    force_update: !!c.force_update, forceUpdate: !!c.force_update,
+    notes_ar: c.update_notes_ar, notes:{ar:c.update_notes_ar}, releaseNotes:{ar:c.update_notes_ar}
+  });
+}
+
+function handlePing_(p) {
+  const s=getSessions_(); const id=String(p.device_id||'unknown');
+  s[id]={device_id:id, device_name:p.device_name||'', device_type:p.device_type||'', platform:p.platform||'', code:p.code||'', country:p.country||'', city:p.city||'', ip:p.ip||'', channel:p.channel||'', last_seen:Date.now()};
+  saveSessions_(s); return ok_({status:'ok', server_revision:getConfig_().server_revision});
+}
+function handleGetSessions_(p) { if (!isAdmin_(p)) return err_('Unauthorized',403); const s=getSessions_(); const now=Date.now(); const arr=Object.values(s); return ok_({total:arr.length, online:arr.filter(x=>now-(x.last_seen||0)<120000).length, sessions:arr}); }
+function adminClearSessions_(){ saveSessions_({}); return ok_({message:'sessions cleared'}); }
+
+function adminUpdateMasterUrl_(newUrl) { if(!newUrl) return err_('master_url is required'); const c=getConfig_(); c.master_url=String(newUrl).trim().replace(/&amp;/g,'&'); bumpRevision_(c); saveConfig_(c); return ok_({server_revision:c.server_revision, message:'✅ تم تعميم الرابط الجديد'}); }
+function adminToggleAppMode_(mode) { if(mode!=='free'&&mode!=='vip') return err_('mode must be free or vip'); const c=getConfig_(); c.app_mode=mode; bumpRevision_(c); saveConfig_(c); return ok_({app_mode:c.app_mode, server_revision:c.server_revision, message:mode==='free'?'✅ الوضع مجاني':'✅ الوضع VIP'}); }
+function adminForceRevision_(){ const c=getConfig_(); bumpRevision_(c); saveConfig_(c); return ok_({server_revision:c.server_revision}); }
+function adminSetAppUpdate_(d){ const c=getConfig_(); if(d.version_code)c.app_version_code=parseInt(d.version_code,10); if(d.version_name)c.app_version_name=String(d.version_name); if(d.apk_url)c.apk_download_url=String(d.apk_url).trim(); if(d.pc_url)c.pc_download_url=String(d.pc_url).trim(); if(d.force_update!==undefined)c.force_update=String(d.force_update)==='true'||d.force_update===true; if(d.notes_ar)c.update_notes_ar=String(d.notes_ar); saveConfig_(c); return ok_({version_code:c.app_version_code}); }
+function adminAddVipCode_(d){ const code=String(d.code||'').trim().toUpperCase(); if(!code)return err_('code required'); const codes=getVipCodes_(); codes[code]={name:d.name||('User '+code), expires_at:d.expires_at||'', disabled:false, playlist_url:d.playlist_url||d.url||'', devices:[]}; saveVipCodes_(codes); return ok_({code}); }
+function adminEditVipCode_(d){ const code=String(d.code||'').trim().toUpperCase(); if(!code)return err_('code required'); const codes=getVipCodes_(); const e=codes[code]||{devices:[]}; if(d.name!=null)e.name=d.name; if(d.expires_at!=null)e.expires_at=d.expires_at; if(d.playlist_url!=null||d.url!=null)e.playlist_url=String(d.playlist_url||d.url||'').trim().replace(/&amp;/g,'&'); if(d.disabled!=null)e.disabled=!!d.disabled; codes[code]=e; saveVipCodes_(codes); const c=getConfig_(); bumpRevision_(c); saveConfig_(c); return ok_({code, server_revision:c.server_revision}); }
+function adminDeleteVipCode_(code){ const codes=getVipCodes_(); delete codes[String(code||'').trim().toUpperCase()]; saveVipCodes_(codes); return ok_({message:'deleted'}); }
+function adminGetVipCodes_(){ const codes=getVipCodes_(); return ok_({total:Object.keys(codes).length, users:Object.entries(codes).map(([code,v])=>Object.assign({code},v)), codes}); }
+function adminClearVipCodes_(){ saveVipCodes_({}); return ok_({deleted_count:0}); }
+function adminSetHiddenCategories_(hidden){ const c=getConfig_(); c.hidden_categories=Array.isArray(hidden)?hidden:[]; bumpRevision_(c); saveConfig_(c); return ok_({server_revision:c.server_revision, hidden_count:c.hidden_categories.length}); }
+function adminSetWallpapers_(wallpapers, interval){ const c=getConfig_(); c.wallpapers=Array.isArray(wallpapers)?wallpapers:[]; c.wallpaper_interval_min=parseInt(interval||c.wallpaper_interval_min||5,10)||5; bumpRevision_(c); saveConfig_(c); return ok_({server_revision:c.server_revision}); }
+function adminSaveCategoryOverrides_(overrides){ const c=getConfig_(); c.category_overrides=overrides||{}; bumpRevision_(c); saveConfig_(c); return ok_({server_revision:c.server_revision}); }
+
+function legacyOverridesFromParams_(p){
+  let names={}; let order=[]; try{names=JSON.parse(p.custom_names||'{}');}catch(e){} try{order=JSON.parse(p.custom_order||'[]');}catch(e){}
+  const out={}; order.forEach((display,idx)=>{ const original=Object.keys(names).find(k=>names[k]===display)||display; out[original]={name:display, order:idx+1}; });
+  Object.keys(names).forEach(k=>{ if(!out[k]) out[k]={name:names[k], order:999}; }); return out;
+}
+function parseHidden_(v){ if(Array.isArray(v))return v; return String(v||'').split(',').map(x=>x.trim()).filter(Boolean); }
+
+function handleInspectSource_(p){ const url=p.url||p.master_url; if(!url)return err_('Missing url'); try{ const t=Date.now(); const res=UrlFetchApp.fetch(url,{method:'get',muteHttpExceptions:true,followRedirects:true}); const body=res.getContentText('UTF-8').substring(0,500); return ok_({http_code:res.getResponseCode(), is_valid:res.getResponseCode()===200&&(body.includes('#EXTINF')||body.includes('user_info')), response_ms:Date.now()-t}); }catch(ex){return ok_({status:'error', is_valid:false, message:ex.toString()});}}
+function parseM3U_(txt){ const out=[]; const lines=String(txt||'').split(/\r?\n/); let cur=null; lines.forEach(line=>{ line=line.trim(); if(line.startsWith('#EXTINF')){ cur={name:(line.split(',').pop()||'قناة').trim(), logo:((line.match(/tvg-logo="([^"]*)"/)||[])[1]||''), group:((line.match(/group-title="([^"]*)"/)||[])[1]||'أخرى')}; } else if(cur && /^https?:\/\//i.test(line)){ cur.url=line; out.push(cur); cur=null; }}); return out; }
+function detectType_(ch){ const t=((ch.url||'')+' '+(ch.group||'')+' '+(ch.name||'')).toLowerCase(); if(t.includes('/movie/')||t.includes('movie')||t.includes('film')||t.includes('vod')||t.includes('أفلام')||t.includes('افلام'))return 'movie'; if(t.includes('/series/')||t.includes('series')||t.includes('مسلسل'))return 'series'; return 'live'; }

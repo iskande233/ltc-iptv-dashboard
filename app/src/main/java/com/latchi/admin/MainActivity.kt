@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -47,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private var revisionText: TextView? = null
     private var currentSourceTitleText: TextView? = null
     private var currentSourceDateText: TextView? = null
+    private var appModeText: TextView? = null
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguageManager.wrap(newBase))
@@ -89,6 +92,7 @@ class MainActivity : AppCompatActivity() {
         ))
 
         content.addView(buildStatusCard())
+        content.addView(buildModeSwitchCard(), cardLp())
         content.addView(sectionTitle("🚀 الواجهات الرئيسية"))
         content.addView(dashboardCard("📦", "واجهة تحديث التطبيق", "نشر APK خارجي أو آخر Build للمستخدمين") {
             startActivity(Intent(this, AppUpdateCenterActivity::class.java))
@@ -186,6 +190,68 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun buildModeSwitchCard(): LinearLayout {
+        return VipUiHelper.buildCard(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(TextView(this@MainActivity).apply {
+                text = "🔀 وضع التطبيق"
+                setTextColor(Color.parseColor("#FFD700"))
+                textSize = 16f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            })
+            appModeText = TextView(this@MainActivity).apply {
+                text = "⏳ جاري القراءة..."
+                setTextColor(Color.parseColor("#B8C0E0"))
+                textSize = 13f
+                setPadding(0, dp(6), 0, dp(10))
+            }
+            addView(appModeText)
+            val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(VipUiHelper.buildMiniButton(this@MainActivity, "🔓 تفعيل المجاني", VipUiHelper.BtnVariant.NEON_GREEN) {
+                switchAppMode("free")
+            }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(6) })
+            row.addView(VipUiHelper.buildMiniButton(this@MainActivity, "🔐 تفعيل VIP", VipUiHelper.BtnVariant.GOLD) {
+                switchAppMode("vip")
+            }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
+            addView(row)
+            addView(TextView(this@MainActivity).apply {
+                text = "المجاني: يدخل مباشرة من غير كود ويستعمل السيرفر المعمم.
+VIP: يطلب كود تفعيل وتبقى كل أدوات المستخدمين والكودات شغالة."
+                setTextColor(Color.parseColor("#8891B8"))
+                textSize = 11f
+                setPadding(0, dp(10), 0, 0)
+            })
+        }
+    }
+
+    private fun switchAppMode(mode: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val payload = JSONObject().apply {
+                    put("action", "toggle_app_mode")
+                    put("password", "iskander_khantouche_2026")
+                    put("secret", ADMIN_SECRET)
+                    put("mode", mode)
+                }.toString()
+                val req = Request.Builder()
+                    .url(GOOGLE_SCRIPT)
+                    .post(payload.toRequestBody("application/json".toMediaType()))
+                    .build()
+                val json = client.newCall(req).execute().use { res -> JSONObject(res.body?.string().orEmpty()) }
+                if (!json.optBoolean("success", json.optString("status") == "success")) throw Exception(json.optString("message", "فشل تغيير الوضع"))
+                withContext(Dispatchers.Main) {
+                    appModeText?.text = if (mode == "free") "🔓 الوضع الحالي: مجاني" else "🔐 الوضع الحالي: VIP"
+                    VipUiHelper.showSuccessOverlay(this@MainActivity, "✅ تم التغيير", json.optString("message", "تم تغيير وضع التطبيق"), "حسناً", {})
+                    loadRemoteStatus()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { VipUiHelper.showErrorOverlay(this@MainActivity, "❌ فشل تغيير الوضع:
+${e.localizedMessage}") }
+            }
+        }
+    }
+
     private fun showDeleteAllUsersConfirmDialog() {
         VipUiHelper.showWarningOverlay(
             this,
@@ -238,6 +304,7 @@ class MainActivity : AppCompatActivity() {
                     val ok = response.isSuccessful && (json?.optBoolean("success", false) == true)
                     val rev = json?.optLong("server_revision", 0L) ?: 0L
                     val masterUrl = json?.optString("master_url", json.optString("default_playlist_url", "")) ?: ""
+                    val appMode = json?.optString("app_mode", "vip") ?: "vip"
                     withContext(Dispatchers.Main) {
                         val publishedName = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("published_source_name", "")?.trim().orEmpty()
                         val publishedExpiry = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("published_source_expiry", "")?.trim().orEmpty()
