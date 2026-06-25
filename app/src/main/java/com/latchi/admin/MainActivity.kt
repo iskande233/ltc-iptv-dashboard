@@ -216,8 +216,7 @@ class MainActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
             addView(row)
             addView(TextView(this@MainActivity).apply {
-                text = "المجاني: يدخل مباشرة من غير كود ويستعمل السيرفر المعمم.
-VIP: يطلب كود تفعيل وتبقى كل أدوات المستخدمين والكودات شغالة."
+                text = "المجاني: يدخل مباشرة من غير كود ويستعمل السيرفر المعمم.\nVIP: يطلب كود تفعيل وتبقى كل أدوات المستخدمين والكودات شغالة."
                 setTextColor(Color.parseColor("#8891B8"))
                 textSize = 11f
                 setPadding(0, dp(10), 0, 0)
@@ -246,8 +245,7 @@ VIP: يطلب كود تفعيل وتبقى كل أدوات المستخدمين 
                     loadRemoteStatus()
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) { VipUiHelper.showErrorOverlay(this@MainActivity, "❌ فشل تغيير الوضع:
-${e.localizedMessage}") }
+                withContext(Dispatchers.Main) { VipUiHelper.showErrorOverlay(this@MainActivity, "❌ فشل تغيير الوضع:\n${e.localizedMessage}") }
             }
         }
     }
