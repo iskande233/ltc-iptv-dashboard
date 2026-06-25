@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "com.latchi.admin"
-        minSdk = 24
+        minSdk = 21
         targetSdk = 34
-        versionCode = 3
-        versionName = "2.1.0 VIP"
+        versionCode = 4
+        versionName = "2.1.1 VIP"
     }
 
     signingConfigs {
