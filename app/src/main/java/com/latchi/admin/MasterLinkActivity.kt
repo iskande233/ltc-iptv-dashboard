@@ -48,6 +48,11 @@ class MasterLinkActivity : AppCompatActivity() {
     private lateinit var progressStatus: TextView
     private lateinit var txtMasterInfoCard: TextView
 
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .build()
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguageManager.wrap(newBase))
     }
