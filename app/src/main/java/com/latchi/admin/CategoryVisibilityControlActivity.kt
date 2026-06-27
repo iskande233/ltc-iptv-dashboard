@@ -108,6 +108,7 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
         loadCurrentRemoteConfig(silent = true)
         loadSavedSources()
         updateCurrentPublishedSourceUi()
+        handlePrefilledSourceIntent()
     }
 
     private fun setFindViewById() {
@@ -171,6 +172,20 @@ class CategoryVisibilityControlActivity : AppCompatActivity() {
             else -> "🔍 النوع: AUTO (سيتم تحديده عند الفحص)"
         }
         inferredTypeText?.text = display
+    }
+
+    private fun handlePrefilledSourceIntent() {
+        val url = intent.getStringExtra("prefill_url")?.replace(" ", "")?.replace("&amp;", "&")?.trim().orEmpty()
+        if (url.isBlank()) return
+        try {
+            inputServerUrl.setText(url)
+            inputSourceUrl.setText(url)
+            if (inputSourceName.text.isNullOrBlank()) inputSourceName.setText("Official Source")
+            statusText.text = "✅ تم تمرير الرابط من واجهة التعميم. يمكنك استخراج الفئات أو الحفظ والتعميم المتقدم."
+            if (intent.getBooleanExtra("auto_extract", false)) {
+                btnExtractGroups.postDelayed({ extractGroupsFromUrl() }, 350)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun setupListeners() {

@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -21,6 +20,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -41,8 +43,6 @@ class MasterLinkActivity : AppCompatActivity() {
 
     private lateinit var inputMasterUrl: EditText
     private lateinit var inputMasterExpiry: EditText
-    private lateinit var inputUserCode: EditText
-    private lateinit var inputUserPlaylistUrl: EditText
     private lateinit var txtLog: TextView
     private lateinit var progressOverlay: View
     private lateinit var progressStatus: TextView
@@ -160,69 +160,22 @@ class MasterLinkActivity : AppCompatActivity() {
                 }
             }
         }, LinearLayout.LayoutParams(0, dp(40), 1.2f).apply { marginStart = dp(6) })
-        urlRow.addView(VipUiHelper.buildMiniButton(
-            this, "📤 للتطبيق", VipUiHelper.BtnVariant.NEON_GREEN
-        ) {
-            val url = inputMasterUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
-            if (url.isNotBlank()) {
-                try {
-                    val i = Intent(Intent.ACTION_VIEW, Uri.parse("latchiiptv://master?url=" + URLEncoder.encode(url, "UTF-8"))).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    }
-                    startActivity(i)
-                    appendLog("✅ تم إرسال الرابط لتطبيق المشاهدة")
-                } catch (e: Exception) {
-                    appendLog("⚠️ تطبيق المشاهدة غير مثبت: ${e.message}")
-                    VipUiHelper.showWarningOverlay(this@MasterLinkActivity, "⚠️ تطبيق المشاهدة غير مثبت",
-                        "تم حفظ الرابط محلياً. ثبّت تطبيق LTC IPTV ثم أعد المحاولة.",
-                        "حسناً", {}, null, null)
-                }
-            }
-        }, LinearLayout.LayoutParams(0, dp(40), 1.3f).apply { marginStart = dp(6) })
         urlContainer.addView(urlRow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
-        // ===== Per-user server override =====
-        content.addView(VipUiHelper.buildInputLabel(this, "👤 سيرفر خاص لمستخدم واحد (اختياري)"))
-        val userServerCard = VipUiHelper.buildCard(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-        }
-        inputUserCode = EditText(this).apply {
-            hint = "كود المستخدم / User code"
-            setHintTextColor(Color.parseColor("#7A82A8"))
-            setTextColor(Color.parseColor("#F2F4FF"))
-            setSingleLine(true)
-            setBackgroundColor(Color.TRANSPARENT)
-            setPadding(dp(4), dp(6), dp(4), dp(6))
-        }
-        inputUserPlaylistUrl = EditText(this).apply {
-            hint = "رابط خاص لهذا المستخدم فقط"
-            setHintTextColor(Color.parseColor("#7A82A8"))
-            setTextColor(Color.parseColor("#F2F4FF"))
-            setSingleLine(false)
-            minLines = 2
-            setBackgroundColor(Color.TRANSPARENT)
-            setPadding(dp(4), dp(6), dp(4), dp(6))
-        }
-        userServerCard.addView(inputUserCode, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        userServerCard.addView(inputUserPlaylistUrl, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
-        val userRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0) }
-        userRow.addView(VipUiHelper.buildMiniButton(this, "📋 لصق الرابط", VipUiHelper.BtnVariant.NEON_BLUE) {
-            VipUiHelper.pasteFromClipboard(this@MasterLinkActivity) { txt -> inputUserPlaylistUrl.setText(txt) }
-        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
-        userRow.addView(VipUiHelper.buildMiniButton(this, "💾 حفظ للمستخدم", VipUiHelper.BtnVariant.NEON_GREEN) {
-            submitUserSpecificServer()
-        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(6) })
-        userServerCard.addView(userRow)
-        userServerCard.addView(TextView(this).apply {
-            text = "ملاحظة: التعميم أعلاه يطبق على الجميع. هذا القسم يغير رابط مستخدم واحد فقط ويبقى رابط خاص به."
-            setTextColor(Color.parseColor("#B8C0E0"))
-            textSize = 11f
-            setPadding(0, dp(8), 0, 0)
-        })
-        content.addView(userServerCard, cardLp())
+        content.addView(urlContainer, cardLp())
+
+        // زر الغربلة الاحترافية السريعة: يفتح واجهة التحكم بالفئات ويمرر الرابط تلقائياً
+        content.addView(VipUiHelper.buildMiniButton(
+            this, "👁️ التعميم المتقدم مع التحكم وإخفاء الفئات والقنوات", VipUiHelper.BtnVariant.NEON_GREEN
+        ) {
+            val url = inputMasterUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
+            startActivity(Intent(this, CategoryVisibilityControlActivity::class.java).apply {
+                putExtra("prefill_url", url)
+                putExtra("auto_extract", url.isNotBlank())
+            })
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { bottomMargin = dp(12) })
 
         // ===== Link expiry =====
         content.addView(VipUiHelper.buildInputLabel(this, "⏳ تاريخ نهاية الرابط (اختياري)"))
@@ -273,11 +226,6 @@ class MasterLinkActivity : AppCompatActivity() {
             this, "⚡ تعميم السيرفر الكامل المباشر", VipUiHelper.BtnVariant.GOLD
         ) { submitMasterUrl() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { bottomMargin = dp(10) })
 
-        btnRow.addView(VipUiHelper.buildPrimaryButton(
-            this, "👁️ التعميم المتقدم مع التحكم وإخفاء الفئات والقنوات", VipUiHelper.BtnVariant.NEON_GREEN
-        ) { 
-            startActivity(Intent(this, CategoryVisibilityControlActivity::class.java))
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
 
         content.addView(btnRow, cardLp().apply { topMargin = dp(4) })
 
@@ -340,44 +288,6 @@ class MasterLinkActivity : AppCompatActivity() {
         progressOverlay = overlay
     }
 
-    private fun submitUserSpecificServer() {
-        val code = inputUserCode.text.toString().trim()
-        val playlist = inputUserPlaylistUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
-        if (code.isBlank() || playlist.isBlank()) {
-            VipUiHelper.showErrorOverlay(this, "أدخل كود المستخدم والرابط الخاص به أولاً.")
-            return
-        }
-        showProgress("جاري حفظ السيرفر الخاص للمستخدم $code...")
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
-                val url = buildString {
-                    append(apiUrl)
-                    append("?action=edit_user")
-                    append("&secret=").append(URLEncoder.encode(SECRET, "UTF-8"))
-                    append("&code=").append(URLEncoder.encode(code, "UTF-8"))
-                    append("&playlist_url=").append(URLEncoder.encode(playlist, "UTF-8"))
-                }
-                val res = URL(url).openConnection() as HttpURLConnection
-                res.requestMethod = "GET"; res.connectTimeout = 15000; res.readTimeout = 25000
-                val body = res.inputStream.bufferedReader().readText()
-                val json = JSONObject(body)
-                val success = json.optBoolean("success", false)
-                withContext(Dispatchers.Main) {
-                    hideProgress()
-                    if (success) {
-                        appendLog("✅ تم حفظ سيرفر خاص للمستخدم $code")
-                        VipUiHelper.showSuccessOverlay(this@MasterLinkActivity, "✅ تم الحفظ", "تم حفظ الرابط الخاص لهذا المستخدم فقط. سيصله التغيير عند المزامنة.", "حسناً", {})
-                    } else {
-                        VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الحفظ:\n${json.optString("message", body)}")
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) { hideProgress(); VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الاتصال:\n${e.localizedMessage}") }
-            }
-        }
-    }
-
     private fun submitMasterUrl() {
         val masterUrl = inputMasterUrl.text.toString().replace(" ", "").replace("&amp;", "&").trim()
         val linkExpiry = inputMasterExpiry.text.toString().trim()
@@ -393,56 +303,28 @@ class MasterLinkActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val apiUrl = getSharedPreferences("admin_prefs", MODE_PRIVATE).getString("apiUrl", DEFAULT_API_URL) ?: DEFAULT_API_URL
-                val encUrl = URLEncoder.encode(masterUrl, "UTF-8")
-                val encLinkExpiry = URLEncoder.encode(linkExpiry, "UTF-8")
-                val encSecret = URLEncoder.encode(SECRET, "UTF-8")
-
-                val url = "$apiUrl?action=update_master_url&secret=$encSecret&master_url=$encUrl&link_expires_at=$encLinkExpiry"
-                val connection = URL(url).openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 15000
-                connection.readTimeout = 25000
-
-                val resCode = connection.responseCode
-                val res = connection.inputStream.bufferedReader().readText()
-
+                val json = publishMasterUrl(apiUrl, masterUrl, linkExpiry)
+                val success = json.optBoolean("success", json.optString("status") == "success")
+                val msg = json.optString("message", json.toString())
                 withContext(Dispatchers.Main) {
                     hideProgress()
-                    if (resCode == 200) {
-                        try {
-                            val json = JSONObject(res)
-                            val success = json.optBoolean("success", false)
-                            val msg = json.optString("message", res)
-                            if (success) {
-                                // 👑 إرسال أمر فرض التحديث لكي تظهر للزبائن 'تم تحديث السيرفر' وتمسح الكاش
-                                try {
-                                    URL("$apiUrl?action=increment_server_revision&secret=$encSecret").readText()
-                                } catch (_: Exception) {}
-
-                                appendLog("⚡✅ نجاح حقيقي: تم تعميم السيرفر على كل المستخدمين ✓${if (linkExpiry.isNotBlank()) "\n📅 نهاية الرابط: $linkExpiry" else ""}")
-                                VipUiHelper.showSuccessOverlay(
-                                    this@MasterLinkActivity,
-                                    title = "⚡ تم تعميم السيرفر بنجاح",
-                                    message = "تم تحديث playlist_url لجميع الأكواد في Google Sheet ✓\nسيتم تطبيق الرابط تلقائياً على جميع المستخدمين في تطبيق المشاهدة.\n\nالرابط المعتمد:\n$masterUrl${if (linkExpiry.isNotBlank()) "\n\n📅 تاريخ نهاية الرابط: $linkExpiry" else ""}",
-                                    primaryText = "📋 نسخ الرابط",
-                                    onPrimary = {
-                                        val cb = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        cb.setPrimaryClip(ClipData.newPlainText("master_url", masterUrl))
-                                    },
-                                    secondaryText = "إغلاق",
-                                    onSecondary = {}
-                                )
-                            } else {
-                                appendLog("❌ فشل التعميم: السيرفر أرجع [$msg]")
-                                VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل التعميم:\n$msg")
-                            }
-                        } catch (e: Exception) {
-                            appendLog("❌ فشل تحليل الرد: [$res]")
-                            VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ الرد غير مفهوم:\n$res")
-                        }
+                    if (success) {
+                        appendLog("⚡✅ تم تعميم السيرفر بنجاح ✓${if (linkExpiry.isNotBlank()) "\n📅 نهاية الرابط: $linkExpiry" else ""}")
+                        VipUiHelper.showSuccessOverlay(
+                            this@MasterLinkActivity,
+                            title = "⚡ تم تعميم السيرفر بنجاح",
+                            message = "تم حفظ السيرفر ورفع Revision للمستخدمين.\n\nالرابط المعتمد:\n$masterUrl${if (linkExpiry.isNotBlank()) "\n\n📅 تاريخ نهاية الرابط: $linkExpiry" else ""}",
+                            primaryText = "📋 نسخ الرابط",
+                            onPrimary = {
+                                val cb = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cb.setPrimaryClip(ClipData.newPlainText("master_url", masterUrl))
+                            },
+                            secondaryText = "إغلاق",
+                            onSecondary = {}
+                        )
                     } else {
-                        appendLog("❌ فشل الاتصال (HTTP $resCode)")
-                        VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل الاتصال (HTTP $resCode)")
+                        appendLog("❌ فشل التعميم: $msg")
+                        VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ فشل التعميم:\n$msg")
                     }
                 }
             } catch (e: Exception) {
@@ -452,6 +334,41 @@ class MasterLinkActivity : AppCompatActivity() {
                     VipUiHelper.showErrorOverlay(this@MasterLinkActivity, "❌ انقطع الاتصال:\n${e.localizedMessage}")
                 }
             }
+        }
+    }
+
+    private fun publishMasterUrl(apiUrl: String, masterUrl: String, linkExpiry: String): JSONObject {
+        // v7 الجديد: POST + password. إذا فشل، نرجع لطريقة GET القديمة للتوافق.
+        return try {
+            val payload = JSONObject().apply {
+                put("action", "update_master_url")
+                put("password", "iskander_khantouche_2026")
+                put("secret", SECRET)
+                put("master_url", masterUrl)
+                if (linkExpiry.isNotBlank()) put("link_expires_at", linkExpiry)
+            }.toString()
+            val req = Request.Builder()
+                .url(apiUrl)
+                .post(payload.toRequestBody("application/json".toMediaType()))
+                .build()
+            val body = client.newCall(req).execute().use { res ->
+                if (!res.isSuccessful) throw Exception("HTTP ${res.code}: ${res.body?.string().orEmpty()}")
+                res.body?.string().orEmpty()
+            }
+            JSONObject(body)
+        } catch (postError: Exception) {
+            appendLog("⚠️ POST فشل، تجربة GET القديم: ${postError.localizedMessage}")
+            val encUrl = URLEncoder.encode(masterUrl, "UTF-8")
+            val encLinkExpiry = URLEncoder.encode(linkExpiry, "UTF-8")
+            val encSecret = URLEncoder.encode(SECRET, "UTF-8")
+            val url = "$apiUrl?action=update_master_url&secret=$encSecret&master_url=$encUrl&link_expires_at=$encLinkExpiry"
+            val connection = URL(url).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 25000
+            val body = (if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream)
+                .bufferedReader().readText()
+            JSONObject(body)
         }
     }
 
