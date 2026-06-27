@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "com.latchi.admin"
-        minSdk = 21
+        minSdk = 19
         targetSdk = 34
-        versionCode = 4
-        versionName = "2.1.1 VIP"
+        versionCode = 5
+        versionName = "2.1.2 VIP"
     }
 
     signingConfigs {
@@ -35,6 +35,7 @@ android {
     }
     buildTypes {
         getByName("debug") {
+            isCrunchPngs = false
             try {
                 signingConfig = signingConfigs.getByName("debug_signed")
             } catch (_: Exception) {}
