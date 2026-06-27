@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbxThygspXN6eB8cDUfY7XavKmhXZfewEUfQqd3vARScZ5y7adterInsbXshNkgPgfiF/exec"
         private const val ADMIN_SECRET = "LatchiAdmin2026"
-        private const val APP_VERSION = "3.0.1 CONTROL"
+        private const val APP_VERSION = "3.0.2 CONTROL"
     }
 
     private val client = OkHttpClient.Builder()
